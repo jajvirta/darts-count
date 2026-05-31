@@ -57,6 +57,7 @@
       history: document.getElementById('historyList'),
       gameOver: document.getElementById('gameOver'),
       gameOverMsg: document.getElementById('gameOverMsg'),
+      btnPlayAgain: document.getElementById('btnPlayAgain'),
       stage: document.getElementById('practiceStage'),
       setup: document.getElementById('practiceSetup'),
       startScore: document.getElementById('startScore'),
@@ -143,6 +144,7 @@
     totalQuestions = 0;
     el.history.innerHTML = '';
     el.gameOver.classList.add('hidden');
+    el.btnPlayAgain.classList.add('hidden');
     el.stage.classList.remove('hidden');
     el.setup.classList.add('hidden');
     document.body.classList.add('playing'); // mobile: hide header chrome
@@ -371,6 +373,7 @@
     if (scoreRemaining === 0) {
       updateEnter();
       document.body.classList.remove('playing'); // leg done — bring nav back
+      el.btnPlayAgain.classList.remove('hidden'); // restart right beside the banner
       setTimeout(() => {
         el.gameOver.classList.remove('hidden');
         const acc = totalQuestions > 0 ? Math.round(correctCount / totalQuestions * 100) : 0;
@@ -455,10 +458,9 @@
     el.seqToggle.checked = s.get('sequentialReveal') !== false;
 
     document.getElementById('btnStart').addEventListener('click', startGame);
-    document.getElementById('btnRestart').addEventListener('click', () => {
-      el.gameOver.classList.add('hidden');
-      startGame();
-    });
+    const restart = () => { el.gameOver.classList.add('hidden'); startGame(); };
+    document.getElementById('btnRestart').addEventListener('click', restart);
+    el.btnPlayAgain.addEventListener('click', restart);
     document.getElementById('btnNewGame').addEventListener('click', () => {
       started = false;
       document.body.classList.remove('playing');

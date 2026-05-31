@@ -146,7 +146,9 @@ button { font-family: inherit; cursor: pointer; }
 .stage-top   { grid-area: top; display: flex; flex-direction: column; gap: 10px; }
 .board-wrap  { grid-area: board; }
 .answer      { grid-area: answer; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-#feedback    { grid-area: fb; }
+.feedback-row { grid-area: fb; display: flex; gap: 10px; align-items: center; }
+.feedback-row .feedback { flex: 1 1 0; min-width: 0; }
+.feedback-row .btn-primary { flex: 0 0 auto; white-space: nowrap; }
 .numpad      { grid-area: pad; justify-self: center; }
 #gameOver    { grid-area: over; }
 .panel-details { grid-area: panel; }
