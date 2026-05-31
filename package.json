@@ -1,13 +1,10 @@
 {
   "name": "darts-count-practice",
   "version": "1.0.0",
-  "description": "Practice counting points for a darts game",
-  "main": "server.js",
+  "description": "Practice counting points and checkouts for darts — static site (S3 + CloudFront)",
+  "private": true,
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
-  },
-  "dependencies": {
-    "express": "^4.21.0"
+    "dev": "npx --yes serve public",
+    "deploy": "./deploy.sh"
   }
 }
