@@ -12,6 +12,11 @@ checkout flashcard trainer and a reference chart.
 
 It's 100% client-side (no backend; settings persist in `localStorage`).
 
+**Controls:** on-screen numpad on every device; the hardware keyboard mirrors it
+(digits, Backspace, Enter/Space). In the Finishes trainer, Space reveals/advances,
+`Y` = knew it, `N` = missed. On mobile the title/tabs hide while a leg is in
+progress to maximise the playing area; the ⟲ button returns to setup.
+
 ## Local development
 
 ```sh
