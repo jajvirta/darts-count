@@ -1,0 +1,13 @@
+{
+  "name": "darts-count-practice",
+  "version": "1.0.0",
+  "description": "Practice counting points for a darts game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

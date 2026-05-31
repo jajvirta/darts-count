@@ -1,0 +1,353 @@
+/* ============================================================
+ * Darts Count Practice — styles (mobile-first)
+ * ============================================================ */
+:root {
+  --bg: #1a1a2e;
+  --card: #16213e;
+  --panel: #0f3460;
+  --accent: #e94560;
+  --accent-dark: #c73652;
+  --green: #2ecc71;
+  --red: #e74c3c;
+  --text: #e0e0e0;
+  --muted: #8a8aa0;
+  --line: #2a2a44;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+button { font-family: inherit; cursor: pointer; }
+.hidden { display: none !important; }
+
+/* ---------- Header & tabs ---------- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(26, 26, 46, 0.95);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px calc(10px + env(safe-area-inset-top)) ;
+  padding-top: max(10px, env(safe-area-inset-top));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.app-header h1 {
+  font-size: 1.25rem;
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(233, 69, 96, 0.3);
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--card);
+  padding: 4px;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 420px;
+}
+.tab {
+  flex: 1;
+  padding: 9px 6px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+.tab.active { background: var(--accent); color: #fff; }
+
+/* ---------- Views ---------- */
+.view {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 14px 12px 28px;
+}
+
+/* ---------- Setup card ---------- */
+.setup-card, .trainer-card {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 20px;
+  max-width: 440px;
+  margin: 8vh auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+.setup-card h2 { color: var(--accent); font-size: 1.1rem; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; color: var(--muted); }
+.field.checkbox { flex-direction: row; align-items: center; gap: 10px; color: var(--text); }
+.field input[type="number"], .field select {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+.field input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+
+.btn-primary {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 12px 18px;
+  font-size: 1rem;
+  transition: background 0.15s;
+}
+.btn-primary:hover { background: var(--accent-dark); }
+.btn-primary.big { padding: 15px; font-size: 1.1rem; }
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 8px;
+  width: 42px;
+  height: 42px;
+  font-size: 1.2rem;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- Practice stage ---------- */
+.stage { display: flex; flex-direction: column; gap: 12px; }
+.stage-top { display: flex; flex-direction: column; gap: 10px; }
+
+.finish-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border-radius: 9px;
+  padding: 8px 12px;
+}
+.hint-toggle {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+.hint-route {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ffd86b;
+  font-size: 1.05rem;
+}
+
+.score-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.score-block { text-align: center; }
+.score-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.score-big { font-size: 3.2rem; font-weight: 800; line-height: 1; color: #fff; }
+
+.dart-slots { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.dart-slots li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--panel);
+  border-radius: 7px;
+  padding: 7px 12px;
+  font-size: 0.95rem;
+}
+.ds-score { font-weight: 700; color: var(--accent); min-width: 2ch; text-align: right; }
+
+/* Board */
+.board-wrap {
+  width: min(86vw, 44vh, 420px);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+}
+#dartboard {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 50%;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Input + numpad */
+.stage-bottom { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.feedback {
+  width: 100%;
+  border-radius: 9px;
+  padding: 10px 12px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.95rem;
+  display: none;
+}
+.feedback.show { display: block; }
+.feedback.correct { background: rgba(46, 204, 113, 0.15); color: var(--green); border: 1px solid var(--green); }
+.feedback.incorrect { background: rgba(231, 76, 60, 0.15); color: var(--red); border: 1px solid var(--red); }
+
+.input-prompt { font-size: 0.9rem; color: var(--muted); text-align: center; }
+.input-display {
+  width: 100%;
+  max-width: 380px;
+  min-height: 56px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 52px;
+  letter-spacing: 2px;
+}
+.input-display.active { border-color: var(--accent); box-shadow: 0 0 10px rgba(233, 69, 96, 0.3); }
+.input-display.pulse { animation: pulse 0.7s ease-out; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(233, 69, 96, 0.6); }
+  70% { box-shadow: 0 0 0 10px rgba(233, 69, 96, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(233, 69, 96, 0); }
+}
+
+.numpad { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 8px; }
+.np-row { display: flex; gap: 8px; }
+.np-key {
+  flex: 1;
+  min-height: 56px;
+  border: none;
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 1.5rem;
+  font-weight: 700;
+  transition: transform 0.05s, background 0.1s;
+  user-select: none;
+}
+.np-key:active { transform: scale(0.94); background: var(--panel); }
+.np-enter { background: var(--accent); color: #fff; font-size: 1.1rem; }
+.np-enter:active { background: var(--accent-dark); }
+.np-enter:disabled { opacity: 0.4; }
+.np-back { background: var(--panel); }
+
+/* Game over */
+.game-over {
+  text-align: center;
+  background: var(--card);
+  border-radius: 14px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.game-over h2 { color: var(--green); }
+
+/* Stats / history */
+.panel-details {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 8px 14px;
+}
+.panel-details summary { cursor: pointer; color: var(--muted); padding: 6px 0; font-size: 0.9rem; }
+.stats { display: flex; width: 100%; justify-content: space-around; text-align: center; padding: 10px 0; }
+.stat-value { font-size: 1.5rem; font-weight: 700; color: #fff; }
+.stat-label { font-size: 0.72rem; color: var(--muted); }
+.history-list { max-height: 180px; overflow-y: auto; }
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin: 2px 0;
+  border-radius: 5px;
+  font-size: 0.85rem;
+}
+.history-item.ok { background: rgba(46, 204, 113, 0.1); }
+.history-item.fail { background: rgba(231, 76, 60, 0.1); }
+
+/* ---------- Trainer ---------- */
+.trainer-card { align-items: center; text-align: center; }
+.trainer-prompt { color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+.trainer-number { font-size: 5rem; font-weight: 800; color: #fff; line-height: 1; }
+.trainer-route {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ffd86b;
+  min-height: 2.2rem;
+}
+.trainer-grade { display: flex; gap: 10px; width: 100%; }
+.btn-grade {
+  flex: 1;
+  padding: 15px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+}
+.btn-grade.knew { background: var(--green); }
+.btn-grade.missed { background: var(--red); }
+.hint-text { font-size: 0.8rem; color: var(--muted); }
+
+/* ---------- Chart ---------- */
+.chart-intro { color: var(--muted); font-size: 0.88rem; margin-bottom: 12px; text-align: center; }
+.fav-key { color: #ffd86b; font-weight: 700; }
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.chart-cell {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-left: 3px solid transparent;
+}
+.chart-cell.fav { border-left-color: #ffd86b; }
+.chart-cell.bogey { opacity: 0.5; }
+.chart-n { font-weight: 800; font-size: 1.1rem; color: #fff; min-width: 2.4ch; }
+.chart-route { color: var(--muted); font-size: 0.9rem; font-weight: 600; }
+.chart-cell.fav .chart-route { color: #ffd86b; }
+
+/* ---------- Desktop enhancements ---------- */
+@media (min-width: 920px) {
+  .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-areas:
+      "top    bottom"
+      "board  bottom"
+      "over   over"
+      "panel  panel";
+    gap: 18px 24px;
+    align-items: start;
+  }
+  .stage-top { grid-area: top; }
+  .board-wrap { grid-area: board; width: min(100%, 460px); }
+  .stage-bottom { grid-area: bottom; position: sticky; top: 96px; }
+  #gameOver { grid-area: over; }
+  .panel-details { grid-area: panel; }
+  .score-big { font-size: 3.8rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .np-key, .input-display.pulse, .tab { transition: none; animation: none; }
+}
