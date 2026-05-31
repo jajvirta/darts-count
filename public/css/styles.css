@@ -121,9 +121,10 @@ button { font-family: inherit; cursor: pointer; }
   border: 1px solid var(--line);
   color: var(--muted);
   border-radius: 8px;
-  width: 42px;
-  height: 42px;
-  font-size: 1.2rem;
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
+  margin-top: 4px;
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
@@ -155,26 +156,36 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 1.05rem;
 }
 
-.score-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
-.score-block { text-align: center; }
-.score-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
-.score-big { font-size: 3.2rem; font-weight: 800; line-height: 1; color: #fff; }
+/* Dart slots (narrow, left) + remaining score (big, right) sit on one row */
+.play-row { display: flex; align-items: center; gap: 10px; }
+.score-block {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.score-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.score-big { font-size: 2.7rem; font-weight: 800; line-height: 1; color: #fff; }
 
-.dart-slots { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.dart-slots { flex: 1 1 auto; min-width: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .dart-slots li {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 6px;
   background: var(--panel);
-  border-radius: 7px;
-  padding: 7px 12px;
-  font-size: 0.95rem;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 0.82rem;
 }
-.ds-score { font-weight: 700; color: var(--accent); min-width: 2ch; text-align: right; }
+.ds-label { min-width: 0; }
+.ds-score { font-weight: 700; color: var(--accent); min-width: 2ch; text-align: right; flex: 0 0 auto; }
 
 /* Board */
 .board-wrap {
-  width: min(86vw, 44vh, 420px);
+  width: min(70vw, 38vh, 360px);
   aspect-ratio: 1 / 1;
   margin: 0 auto;
 }
@@ -326,6 +337,15 @@ button { font-family: inherit; cursor: pointer; }
 .chart-n { font-weight: 800; font-size: 1.1rem; color: #fff; min-width: 2.4ch; }
 .chart-route { color: var(--muted); font-size: 0.9rem; font-weight: 600; }
 .chart-cell.fav .chart-route { color: #ffd86b; }
+
+/* ---------- Mobile: maximise the playing area ---------- */
+@media (max-width: 919px) {
+  /* While a leg is in progress, drop the title + tabs to save vertical space.
+     The ⟲ button returns to setup, which brings the header (and nav) back. */
+  body.playing .app-header { display: none; }
+  body.playing #view-practice { padding-top: 10px; }
+  body.playing .stage { gap: 8px; }
+}
 
 /* ---------- Desktop enhancements ---------- */
 @media (min-width: 920px) {

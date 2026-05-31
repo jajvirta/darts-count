@@ -145,6 +145,7 @@
     el.gameOver.classList.add('hidden');
     el.stage.classList.remove('hidden');
     el.setup.classList.add('hidden');
+    document.body.classList.add('playing'); // mobile: hide header chrome
     started = true;
 
     el.score.textContent = scoreRemaining;
@@ -369,6 +370,7 @@
   function finishOrAdvance(allCorrect, roundScore) {
     if (scoreRemaining === 0) {
       updateEnter();
+      document.body.classList.remove('playing'); // leg done — bring nav back
       setTimeout(() => {
         el.gameOver.classList.remove('hidden');
         const acc = totalQuestions > 0 ? Math.round(correctCount / totalQuestions * 100) : 0;
@@ -459,6 +461,7 @@
     });
     document.getElementById('btnNewGame').addEventListener('click', () => {
       started = false;
+      document.body.classList.remove('playing');
       el.stage.classList.add('hidden');
       el.setup.classList.remove('hidden');
       el.gameOver.classList.add('hidden');
