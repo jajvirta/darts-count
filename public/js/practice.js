@@ -183,7 +183,7 @@
 
     if (settings().get('sequentialReveal')) {
       phase = 'reveal';
-      setPrompt('Tap board or “Reveal” to see each dart — sum as you go.');
+      setPrompt('Reveal each dart →');
     } else {
       revealed = 3;
       revealMarkers();
@@ -213,7 +213,7 @@
   function beginRoundInput() {
     phase = 'round';
     value = '';
-    setPrompt('3-dart total (what they scored this turn):');
+    setPrompt('3-dart total');
     updateDisplay();
     el.display.classList.add('active');
     updateEnter();
@@ -285,7 +285,7 @@
 
     phase = 'remaining';
     value = '';
-    setPrompt('Remaining after dart ' + (dartIndex + 1) + ':');
+    setPrompt('After dart ' + (dartIndex + 1));
     updateDisplay();
     el.display.classList.add('active');
     updateEnter();
@@ -424,7 +424,7 @@
       answers.round = parseInt(value);
       phase = 'remaining';
       value = '';
-      setPrompt('New remaining score:');
+      setPrompt('New remaining');
       updateDisplay();
       updateEnter();
       pulseDisplay();

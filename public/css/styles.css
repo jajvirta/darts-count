@@ -129,8 +129,27 @@ button { font-family: inherit; cursor: pointer; }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- Practice stage ---------- */
-.stage { display: flex; flex-direction: column; gap: 12px; }
-.stage-top { display: flex; flex-direction: column; gap: 10px; }
+/* Mobile grid: input sits next to the (smaller) board; numpad full width. */
+.stage {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "top     top"
+    "board   answer"
+    "fb      fb"
+    "pad     pad"
+    "over    over"
+    "panel   panel";
+  gap: 12px;
+  align-items: center;
+}
+.stage-top   { grid-area: top; display: flex; flex-direction: column; gap: 10px; }
+.board-wrap  { grid-area: board; }
+.answer      { grid-area: answer; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+#feedback    { grid-area: fb; }
+.numpad      { grid-area: pad; justify-self: center; }
+#gameOver    { grid-area: over; }
+.panel-details { grid-area: panel; }
 
 .finish-hint {
   display: flex;
@@ -185,9 +204,8 @@ button { font-family: inherit; cursor: pointer; }
 
 /* Board */
 .board-wrap {
-  width: min(70vw, 38vh, 360px);
+  width: min(56vw, 36vh, 300px);
   aspect-ratio: 1 / 1;
-  margin: 0 auto;
 }
 #dartboard {
   width: 100%;
@@ -198,7 +216,6 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* Input + numpad */
-.stage-bottom { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .feedback {
   width: 100%;
   border-radius: 9px;
@@ -212,20 +229,21 @@ button { font-family: inherit; cursor: pointer; }
 .feedback.correct { background: rgba(46, 204, 113, 0.15); color: var(--green); border: 1px solid var(--green); }
 .feedback.incorrect { background: rgba(231, 76, 60, 0.15); color: var(--red); border: 1px solid var(--red); }
 
-.input-prompt { font-size: 0.9rem; color: var(--muted); text-align: center; }
+.input-prompt { font-size: 0.78rem; color: var(--muted); text-align: center; }
 .input-display {
   width: 100%;
-  max-width: 380px;
-  min-height: 56px;
+  max-width: 150px;
+  margin: 0 auto;
+  min-height: 48px;
   border: 2px solid var(--line);
   border-radius: 10px;
   background: var(--bg);
   color: #fff;
-  font-size: 2rem;
+  font-size: 1.7rem;
   font-weight: 700;
   text-align: center;
-  line-height: 52px;
-  letter-spacing: 2px;
+  line-height: 44px;
+  letter-spacing: 1px;
 }
 .input-display.active { border-color: var(--accent); box-shadow: 0 0 10px rgba(233, 69, 96, 0.3); }
 .input-display.pulse { animation: pulse 0.7s ease-out; }
@@ -239,12 +257,12 @@ button { font-family: inherit; cursor: pointer; }
 .np-row { display: flex; gap: 8px; }
 .np-key {
   flex: 1;
-  min-height: 56px;
+  min-height: 50px;
   border: none;
   border-radius: 10px;
   background: var(--card);
   color: var(--text);
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   transition: transform 0.05s, background 0.1s;
   user-select: none;
@@ -350,21 +368,18 @@ button { font-family: inherit; cursor: pointer; }
 /* ---------- Desktop enhancements ---------- */
 @media (min-width: 920px) {
   .stage {
-    display: grid;
     grid-template-columns: minmax(0, 1fr) 380px;
     grid-template-areas:
-      "top    bottom"
-      "board  bottom"
-      "over   over"
-      "panel  panel";
-    gap: 18px 24px;
+      "top     answer"
+      "board   pad"
+      "fb      fb"
+      "over    over"
+      "panel   panel";
+    gap: 16px 24px;
     align-items: start;
   }
-  .stage-top { grid-area: top; }
-  .board-wrap { grid-area: board; width: min(100%, 460px); }
-  .stage-bottom { grid-area: bottom; position: sticky; top: 96px; }
-  #gameOver { grid-area: over; }
-  .panel-details { grid-area: panel; }
+  .board-wrap { width: min(100%, 460px); }
+  .answer { align-self: end; }
   .score-big { font-size: 3.8rem; }
 }
 
