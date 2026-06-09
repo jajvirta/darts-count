@@ -1,3 +1,7 @@
 node_modules
 .vscode/
 deploy.env
+
+# ad-hoc diagnostic dumps — may contain bucket/origin/distribution identifiers
+behaviors.txt
+curl-output.txt
