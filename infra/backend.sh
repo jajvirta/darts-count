@@ -110,16 +110,28 @@ aws lambda wait function-active-v2 --function-name "$LAMBDA_NAME" --region "$REG
 
 # ---------- 4. Function URL ----------
 if aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" >/dev/null 2>&1; then
-  echo "==> Function URL already configured"
+  echo "==> Ensuring Function URL auth type = NONE"
+  aws lambda update-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" \
+    --auth-type NONE >/dev/null
 else
   echo "==> Creating Function URL (auth NONE)"
   aws lambda create-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" \
     --auth-type NONE >/dev/null
 fi
-# Public-invoke permission (idempotent — ignore if it already exists).
-aws lambda add-permission --function-name "$LAMBDA_NAME" --region "$REGION" \
-  --statement-id FunctionURLPublicInvoke --action lambda:InvokeFunctionUrl \
-  --principal "*" --function-url-auth-type NONE >/dev/null 2>&1 || true
+# Public-invoke permission. Without this the Function URL rejects every request
+# with AccessDeniedException ("Forbidden … Function URL authorization"), even
+# with auth NONE. add-permission errors if the statement already exists — treat
+# ONLY that as benign; surface anything else instead of silently swallowing it.
+echo "==> Ensuring public-invoke permission"
+if ! aws lambda add-permission --function-name "$LAMBDA_NAME" --region "$REGION" \
+       --statement-id FunctionURLPublicInvoke --action lambda:InvokeFunctionUrl \
+       --principal "*" --function-url-auth-type NONE >/dev/null 2>"$TMP/addperm.err"; then
+  if grep -qi "ResourceConflictException\|already exists" "$TMP/addperm.err"; then
+    echo "    (permission already present)"
+  else
+    echo "add-permission failed:"; cat "$TMP/addperm.err"; exit 1
+  fi
+fi
 
 FN_URL="$(aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" --query FunctionUrl --output text)"
 FN_HOST="${FN_URL#https://}"; FN_HOST="${FN_HOST%/}"
