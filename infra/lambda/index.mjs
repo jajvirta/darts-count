@@ -125,8 +125,7 @@ export async function handler(event) {
     }
 
     if (route.kind === 'create') {
-      const parsed = parseBody(event);
-      const v = validateSession(parsed);
+      const v = validateSession(parseInput(event));
       if (!v.ok) return json(400, { error: v.error });
       const id = makeId(v.value.date);
       const item = { pk: PK, sk: id, id, createdAt: new Date().toISOString(), ...v.value };
@@ -137,8 +136,7 @@ export async function handler(event) {
     if (route.kind === 'update') {
       const existing = await d.send(new GetCommand({ TableName: TABLE, Key: { pk: PK, sk: route.id } }));
       if (!existing.Item) return json(404, { error: 'not found' });
-      const parsed = parseBody(event);
-      const v = validateSession(parsed);
+      const v = validateSession(parseInput(event));
       if (!v.ok) return json(400, { error: v.error });
       const item = { ...existing.Item, ...v.value, pk: PK, sk: route.id, id: route.id };
       await d.send(new PutCommand({ TableName: TABLE, Item: item }));
@@ -161,6 +159,14 @@ function parseBody(event) {
   let body = event.body;
   if (event.isBase64Encoded) body = Buffer.from(body, 'base64').toString('utf8');
   try { return JSON.parse(body); } catch (e) { return null; }
+}
+// Session fields come from the query string (CloudFront OAC signs the query but
+// NOT the request body, so writes carry data as params, not JSON). Falls back
+// to a JSON body for direct/uncached testing. validateSession coerces strings.
+function parseInput(event) {
+  const q = event && event.queryStringParameters;
+  if (q && Object.keys(q).length) return q;
+  return parseBody(event);
 }
 function stripKeys(item) {
   const { pk, sk, ...rest } = item;

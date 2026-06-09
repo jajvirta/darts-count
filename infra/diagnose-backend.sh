@@ -115,15 +115,15 @@ if [[ -n "$FN_URL" ]]; then
 else echo "  (skipped: no Function URL)"; fi
 
 # ---------------------------------------------------------------------------
-hr "7. LIVE — through CloudFront, X-Api-Key only, NO Authorization (the real test)"
-echo "Sends NO Authorization header so it can't clobber the OAC signature."
+hr "7. LIVE — through CloudFront, X-Api-Key only, data in query string (the real test)"
+echo "No Authorization header and NO request body: OAC signs the query string but"
+echo "not the body, so writes pass fields as query params."
 CF_DOMAIN="$(aws cloudfront get-distribution --id "$DISTRIBUTION_ID" --query 'Distribution.DomainName' --output text 2>/dev/null)"
 if [[ -n "$CF_DOMAIN" && "$CF_DOMAIN" != "None" ]]; then
   CFURL="https://${CF_DOMAIN}/${PREFIX:+$PREFIX/}api/sessions"
-  echo "POST $CFURL"
-  R=$(curl -s -m 20 -w $'\n%{http_code}' -X POST "$CFURL" \
-        -H "X-Api-Key: $API_TOKEN" -H 'content-type: application/json' \
-        -d '{"date":"2000-01-01","type":"technique","target":"diag","darts":1,"score":0,"notes":"diagnostic-delete-me"}')
+  Q="date=2000-01-01&type=technique&target=diag&darts=1&score=0&notes=diagnostic-delete-me"
+  echo "POST ${CFURL}?${Q}"
+  R=$(curl -s -m 20 -w $'\n%{http_code}' -X POST "${CFURL}?${Q}" -H "X-Api-Key: $API_TOKEN")
   C=$(code_of "$R"); B=$(body_of "$R")
   echo "HTTP $C"; echo "$B"
   case "$C" in
@@ -131,7 +131,7 @@ if [[ -n "$CF_DOMAIN" && "$CF_DOMAIN" != "None" ]]; then
          ID=$(jq -r '.session.id // empty' <<<"$B" 2>/dev/null)
          [[ -n "$ID" ]] && curl -s -m 15 -o /dev/null -X DELETE "${CFURL}/$ID" -H "X-Api-Key: $API_TOKEN" \
             && echo "  (cleaned up diagnostic row $ID)" ;;
-    403) if grep -qi 'signature' <<<"$B"; then echo "  >> SigV4 mismatch — something is still sending/forwarding an Authorization header that overrides the OAC signature. Make sure no client sends Authorization (we use X-Api-Key).";
+    403) if grep -qi 'signature' <<<"$B"; then echo "  >> SigV4 mismatch — a client/request is still sending a body or an Authorization header. This curl sends neither; if the app fails but this passes, redeploy the frontend (store.js sends query params now).";
          elif grep -qi '"error":"forbidden"' <<<"$B"; then echo "  >> origin-secret mismatch (section 4).";
          elif grep -qi 'Function URL authorization\|AccessDenied' <<<"$B"; then echo "  >> OAC/permission not effective (sections 1,2,4).";
          elif grep -qi '<Error>\|<Code>AccessDenied' <<<"$B"; then echo "  >> routed to S3, not Lambda (section 5).";

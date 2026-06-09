@@ -43,14 +43,20 @@ is now redundant given the signature, but kept as harmless defence-in-depth.)
 All under `/<prefix>/api` (e.g. `/darts/api`). Auth on every request:
 `X-Api-Key: <API_TOKEN>` (CloudFront adds the OAC signature + origin secret).
 
-| Method | Path             | Body                                   | Returns            |
+| Method | Path             | Fields (query string)                  | Returns            |
 |--------|------------------|----------------------------------------|--------------------|
 | GET    | `/sessions`      | —                                      | `{ sessions: [] }` |
-| POST   | `/sessions`      | `{date,type,target,darts,score,notes}` | `{ session }`      |
+| POST   | `/sessions`      | `?date&type&target&darts&score&notes`  | `{ session }`      |
 | PUT    | `/sessions/{id}` | same                                   | `{ session }`      |
 | DELETE | `/sessions/{id}` | —                                      | `{ deleted }`      |
 
 `type` ∈ `test | interleave | volume | technique`. Only `test` feeds the trend.
+
+**Writes carry data in the query string, not a JSON body.** CloudFront OAC signs
+the query string but *not* the request body, so a body would break the SigV4
+signature on the IAM-auth Function URL. The Lambda reads fields from
+`queryStringParameters` (and still accepts a JSON body for direct/uncached
+testing). Payloads are tiny, so the URL-length limit is a non-issue.
 
 ## One-time setup
 
