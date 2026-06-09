@@ -4,13 +4,16 @@
 #   1. a DynamoDB table (on-demand) holding sessions
 #   2. an IAM role for the Lambda (basic logs + table access)
 #   3. a Node 20 Lambda (no bundled deps; AWS SDK from the runtime)
-#   4. a Lambda Function URL (auth NONE; guarded by a bearer token +
-#      a CloudFront-injected origin secret)
-#   5. on your EXISTING distribution: a Lambda origin + an ORDERED
-#      cache behavior for the API path, inserted BEFORE the app behavior
+#   4. a Lambda Function URL (auth AWS_IAM) + a CloudFront OAC that SigV4-signs
+#      requests, with invoke scoped to the CloudFront principal + this dist.
+#      (AWS_IAM, not anonymous, because some AWS Org guardrails forbid public
+#      Function URLs. A bearer token still gates the app; an optional
+#      X-Origin-Secret header is now redundant but harmless.)
+#   5. on your EXISTING distribution: a Lambda origin (with the OAC attached) +
+#      an ORDERED cache behavior for the API path, inserted BEFORE the app one
 #
 # Safe to re-run: updates the function code/config, and only mutates the
-# distribution when the origin/behavior are missing (prompts first).
+# distribution when the origin (incl. its OAC) or behavior are missing.
 #
 # Usage:  aws-vault exec <profile> -- ./infra/backend.sh
 #         APPLY=1 aws-vault exec <profile> -- ./infra/backend.sh   # skip prompt
@@ -38,12 +41,14 @@ PREFIX="${PATH_PATTERN%/\*}"; PREFIX="${PREFIX#/}"
 if [[ -n "$PREFIX" ]]; then API_PATTERN="/${PREFIX}/api/*"; else API_PATTERN="/api/*"; fi
 
 ORIGIN_ID="lambda-${LAMBDA_NAME}"
+OAC_NAME="${LAMBDA_NAME}-oac"
 CACHING_DISABLED="4135ea2d-6df8-44a3-9df3-4b5a84be39ad"           # AWS managed
 ALL_VIEWER_EXCEPT_HOST="b689b0a8-53d0-40ab-baf2-68738e2966ac"     # AWS managed (for Lambda/ALB origins)
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 TABLE_ARN="arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/${TABLE_NAME}"
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${LAMBDA_ROLE}"
+DIST_ARN="arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${DISTRIBUTION_ID}"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
@@ -54,6 +59,7 @@ echo "Distribution: $DISTRIBUTION_ID"
 echo "Table:        $TABLE_NAME"
 echo "Lambda:       $LAMBDA_NAME (role $LAMBDA_ROLE)"
 echo "API path:     $API_PATTERN"
+echo "Auth model:   CloudFront OAC (Function URL = AWS_IAM, SigV4-signed)"
 echo "Origin guard: $GUARD_DESC"
 echo
 
@@ -108,24 +114,43 @@ else
 fi
 aws lambda wait function-active-v2 --function-name "$LAMBDA_NAME" --region "$REGION"
 
-# ---------- 4. Function URL ----------
+# ---------- 4. Function URL (AWS_IAM) + Origin Access Control ----------
+# Anonymous (auth NONE) Function URLs are blocked by some AWS Organizations
+# guardrails (persistent AccessDeniedException). So the URL uses AWS_IAM and
+# CloudFront signs every request via an OAC — the caller is the in-org
+# cloudfront.amazonaws.com service principal, never anonymous.
 if aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" >/dev/null 2>&1; then
-  echo "==> Ensuring Function URL auth type = NONE"
+  echo "==> Ensuring Function URL auth type = AWS_IAM"
   aws lambda update-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" \
-    --auth-type NONE >/dev/null
+    --auth-type AWS_IAM >/dev/null
 else
-  echo "==> Creating Function URL (auth NONE)"
+  echo "==> Creating Function URL (auth AWS_IAM)"
   aws lambda create-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" \
-    --auth-type NONE >/dev/null
+    --auth-type AWS_IAM >/dev/null
 fi
-# Public-invoke permission. Without this the Function URL rejects every request
-# with AccessDeniedException ("Forbidden … Function URL authorization"), even
-# with auth NONE. add-permission errors if the statement already exists — treat
-# ONLY that as benign; surface anything else instead of silently swallowing it.
-echo "==> Ensuring public-invoke permission"
+
+# OAC (type lambda) that SigV4-signs CloudFront -> Function URL requests.
+OAC_ID="$(aws cloudfront list-origin-access-controls \
+  --query "OriginAccessControlList.Items[?Name=='${OAC_NAME}'].Id | [0]" --output text 2>/dev/null || true)"
+if [[ -z "$OAC_ID" || "$OAC_ID" == "None" ]]; then
+  echo "==> Creating Origin Access Control $OAC_NAME (type lambda)"
+  OAC_ID="$(aws cloudfront create-origin-access-control \
+    --origin-access-control-config \
+    "Name=${OAC_NAME},SigningProtocol=sigv4,SigningBehavior=always,OriginAccessControlOriginType=lambda" \
+    --query 'OriginAccessControl.Id' --output text)"
+else
+  echo "==> OAC $OAC_NAME exists ($OAC_ID)"
+fi
+
+# Invoke permission: ONLY the CloudFront service principal, scoped to this
+# distribution. Drop any earlier public-invoke statement. add-permission errors
+# if the statement already exists — treat ONLY that as benign.
+echo "==> Ensuring CloudFront-scoped invoke permission"
+aws lambda remove-permission --function-name "$LAMBDA_NAME" --region "$REGION" \
+  --statement-id FunctionURLPublicInvoke >/dev/null 2>&1 || true
 if ! aws lambda add-permission --function-name "$LAMBDA_NAME" --region "$REGION" \
-       --statement-id FunctionURLPublicInvoke --action lambda:InvokeFunctionUrl \
-       --principal "*" --function-url-auth-type NONE >/dev/null 2>"$TMP/addperm.err"; then
+       --statement-id AllowCloudFrontServicePrincipal --action lambda:InvokeFunctionUrl \
+       --principal cloudfront.amazonaws.com --source-arn "$DIST_ARN" >/dev/null 2>"$TMP/addperm.err"; then
   if grep -qi "ResourceConflictException\|already exists" "$TMP/addperm.err"; then
     echo "    (permission already present)"
   else
@@ -143,23 +168,24 @@ aws cloudfront get-distribution-config --id "$DISTRIBUTION_ID" > "$TMP/dist.json
 ETAG="$(jq -r '.ETag' "$TMP/dist.json")"
 jq '.DistributionConfig' "$TMP/dist.json" > "$TMP/config.json"
 
-HAVE_ORIGIN="$(jq --arg id "$ORIGIN_ID" 'any(.Origins.Items[]; .Id == $id)' "$TMP/config.json")"
+ORIGIN_OAC="$(jq -r --arg id "$ORIGIN_ID" '(.Origins.Items[] | select(.Id==$id) | .OriginAccessControlId) // ""' "$TMP/config.json")"
 HAVE_BEHAVIOR="$(jq --arg p "$API_PATTERN" '((.CacheBehaviors.Items // [])[] | select(.PathPattern == $p)) // empty | true' "$TMP/config.json")"
 
-if [[ "$HAVE_ORIGIN" == "true" && "$HAVE_BEHAVIOR" == "true" ]]; then
-  echo "==> Distribution already has the API origin + behavior — nothing to change."
+if [[ "$ORIGIN_OAC" == "$OAC_ID" && "$HAVE_BEHAVIOR" == "true" ]]; then
+  echo "==> Distribution already has the API origin (with OAC) + behavior — nothing to change."
 else
   if [[ -n "$ORIGIN_SECRET" ]]; then
     CUSTOM_HEADERS="$(jq -n --arg v "$ORIGIN_SECRET" '{Quantity:1,Items:[{HeaderName:"X-Origin-Secret",HeaderValue:$v}]}')"
   else
     CUSTOM_HEADERS='{"Quantity":0}'
   fi
-  ORIGIN_JSON="$(jq -n --arg id "$ORIGIN_ID" --arg domain "$FN_HOST" --argjson ch "$CUSTOM_HEADERS" '
+  ORIGIN_JSON="$(jq -n --arg id "$ORIGIN_ID" --arg domain "$FN_HOST" --arg oac "$OAC_ID" --argjson ch "$CUSTOM_HEADERS" '
     { Id:$id, DomainName:$domain, OriginPath:"",
       CustomHeaders:$ch,
       CustomOriginConfig:{ HTTPPort:80, HTTPSPort:443, OriginProtocolPolicy:"https-only",
         OriginSslProtocols:{Quantity:1,Items:["TLSv1.2"]},
         OriginReadTimeout:30, OriginKeepaliveTimeout:5 },
+      OriginAccessControlId:$oac,
       ConnectionAttempts:3, ConnectionTimeout:10,
       OriginShield:{Enabled:false} }')"
   BEHAVIOR_JSON="$(jq -n --arg origin "$ORIGIN_ID" --arg pattern "$API_PATTERN" \
@@ -175,10 +201,13 @@ else
       LambdaFunctionAssociations:{Quantity:0},
       FieldLevelEncryptionId:"", SmoothStreaming:false }')"
 
-  # Add origin if missing; put the API behavior FIRST so it out-ranks /<prefix>/*.
+  # Add the origin if missing (else just set its OAC); put the API behavior FIRST
+  # so it out-ranks /<prefix>/*.
   jq --argjson origin "$ORIGIN_JSON" --argjson behavior "$BEHAVIOR_JSON" \
-     --arg originId "$ORIGIN_ID" --arg pattern "$API_PATTERN" '
-    .Origins.Items |= (if any(.Id == $originId) then . else . + [$origin] end)
+     --arg originId "$ORIGIN_ID" --arg pattern "$API_PATTERN" --arg oac "$OAC_ID" '
+    .Origins.Items |= (if any(.Id == $originId)
+                       then map(if .Id == $originId then (.OriginAccessControlId = $oac) else . end)
+                       else . + [$origin] end)
     | .Origins.Quantity = (.Origins.Items | length)
     | .CacheBehaviors = (.CacheBehaviors // {Quantity:0, Items:[]})
     | .CacheBehaviors.Items = ([ $behavior ] + ((.CacheBehaviors.Items // []) | map(select(.PathPattern != $pattern))))
@@ -186,7 +215,7 @@ else
   ' "$TMP/config.json" > "$TMP/config-new.json"
 
   echo "==> Planned change to distribution $DISTRIBUTION_ID:"
-  [[ "$HAVE_ORIGIN" == "true" ]] || echo "    + origin '$ORIGIN_ID' -> $FN_HOST (https-only)"
+  echo "    + origin '$ORIGIN_ID' -> $FN_HOST (https-only, OAC $OAC_ID)"
   echo "    + ordered behavior '$API_PATTERN' -> '$ORIGIN_ID' (CachingDisabled, first in precedence)"
 
   if [[ "${APPLY:-}" != "1" ]]; then

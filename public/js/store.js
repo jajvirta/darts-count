@@ -1,9 +1,10 @@
 /* ============================================================
  * store.js — remote session store (talks to the Lambda API).
  * Same-origin: the API lives at "<app dir>/api/*" behind CloudFront,
- * so no CORS. Auth is a bearer token the user pastes once (kept in
- * Settings/localStorage). All methods return promises.
- * Exposes window.Store.
+ * so no CORS. Auth is a secret the user pastes once (kept in
+ * Settings/localStorage), sent in the X-Api-Key header — NOT
+ * Authorization, which CloudFront OAC reserves for its SigV4 signature.
+ * All methods return promises. Exposes window.Store.
  * ============================================================ */
 (function (global) {
   'use strict';
@@ -25,7 +26,7 @@
     configured() { return !!this.token(); },
 
     async _req(method, path, body) {
-      const headers = { Authorization: 'Bearer ' + this.token() };
+      const headers = { 'X-Api-Key': this.token() };
       if (body) headers['content-type'] = 'application/json';
       let res;
       try {

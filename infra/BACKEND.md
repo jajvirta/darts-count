@@ -9,26 +9,39 @@ backend is thin storage only.
 
 ```
 Browser (Log view)
-   │  fetch  Authorization: Bearer <API_TOKEN>
+   │  fetch  X-Api-Key: <API_TOKEN>     (NOT Authorization — see below)
    ▼
 CloudFront  ──  behavior "/<prefix>/api/*"  (CachingDisabled, AllViewerExceptHostHeader)
-   │            injects header  X-Origin-Secret: <ORIGIN_SECRET>
+   │            OAC signs the request (SigV4) → sets the Authorization header
+   │            also injects  X-Origin-Secret: <ORIGIN_SECRET>
    ▼
-Lambda Function URL  (Node 20, no bundled deps — AWS SDK from runtime)
-   │            checks bearer token + origin secret
+Lambda Function URL  (auth AWS_IAM; Node 20, no bundled deps — SDK from runtime)
+   │            IAM validates the OAC signature; handler checks X-Api-Key (+ secret)
    ▼
 DynamoDB table  (pk="me", sk=<id>)   on-demand billing
 ```
 
-Why this shape: it reuses your existing CloudFront distribution (so the API is
-same-origin — no CORS), needs no API Gateway, and costs ~nothing at personal
-volume. The `X-Origin-Secret` header means the Function URL (auth NONE) can't be
-usefully hit directly, bypassing CloudFront.
+Why this shape: it reuses your existing CloudFront distribution (same-origin —
+no CORS), needs no API Gateway, and costs ~nothing at personal volume.
+
+**Why AWS_IAM + OAC, not a public (auth NONE) Function URL:** many AWS
+Organizations apply an SCP/RCP that forbids anonymous (`principal: *`) Function
+URL invocation — you get a persistent `AccessDeniedException` no matter how
+correct the function's own policy is. With OAC, CloudFront SigV4-signs each
+request, so the caller is the in-org `cloudfront.amazonaws.com` service
+principal (scoped to your distribution), never anonymous.
+
+**Why the user secret is `X-Api-Key`, not `Authorization`:** a Lambda Function
+URL uses the `Authorization` header for its IAM signature, and OAC sets it. If a
+client also sent `Authorization: Bearer …`, it would clobber the OAC signature
+(`The request signature we calculated does not match …`). So the user secret
+travels in `X-Api-Key`; no client should send `Authorization`. (`X-Origin-Secret`
+is now redundant given the signature, but kept as harmless defence-in-depth.)
 
 ## API
 
 All under `/<prefix>/api` (e.g. `/darts/api`). Auth on every request:
-`Authorization: Bearer <API_TOKEN>` (+ the CloudFront origin secret).
+`X-Api-Key: <API_TOKEN>` (CloudFront adds the OAC signature + origin secret).
 
 | Method | Path             | Body                                   | Returns            |
 |--------|------------------|----------------------------------------|--------------------|
@@ -73,10 +86,14 @@ exist). Requires `aws`, `jq`, `zip`.
 
 ## Notes & caveats
 
-- **Auth is single-user and simple by design.** The bearer token is a shared
-  secret behind HTTPS — right for a personal app, not multi-tenant. Rotate by
+- **Auth is single-user and simple by design.** The `X-Api-Key` secret is a
+  shared secret, on top of the OAC signature that proves the request came from
+  your distribution — right for a personal app, not multi-tenant. Rotate by
   changing `API_TOKEN` in `deploy.env` and re-running `backend.sh` (then
   re-paste it in the app).
+- **Don't send an `Authorization` header to the API** from any client — OAC
+  reserves it for the SigV4 signature, and a stray one causes
+  `The request signature we calculated does not match …`. Use `X-Api-Key`.
 - **DynamoDB is the single source of truth** for sessions. Enter everything via
   the app's Log tab. (The progress math lives in `public/js/scoring-stats.js`,
   which the Log view uses and which has a Node export shim for unit tests.)

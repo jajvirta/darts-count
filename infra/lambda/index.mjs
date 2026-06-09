@@ -9,7 +9,9 @@
  *
  * Env:
  *   TABLE_NAME     DynamoDB table (pk="me", sk=id)
- *   API_TOKEN      shared bearer token; clients send Authorization: Bearer <token>
+ *   API_TOKEN      shared secret; clients send it in the X-Api-Key header.
+ *                  (NOT Authorization — with CloudFront OAC that header is
+ *                  reserved for the SigV4 signature.)
  *   ORIGIN_SECRET  (optional) value CloudFront injects as X-Origin-Secret;
  *                  if set, requests missing it are rejected (blocks direct hits)
  * ============================================================ */
@@ -34,13 +36,14 @@ export function header(headers, name) {
 }
 
 // Returns null when authorized, or a {statusCode,...} response when not.
+// The user secret arrives in X-Api-Key; Authorization is reserved for the
+// CloudFront OAC SigV4 signature and is consumed by the Function URL itself.
 export function checkAuth(headers, env) {
   if (env.ORIGIN_SECRET && header(headers, 'x-origin-secret') !== env.ORIGIN_SECRET) {
     return json(403, { error: 'forbidden' });
   }
-  const auth = header(headers, 'authorization') || '';
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  if (!env.API_TOKEN || !m || m[1] !== env.API_TOKEN) {
+  const token = header(headers, 'x-api-key') || '';
+  if (!env.API_TOKEN || token !== env.API_TOKEN) {
     return json(401, { error: 'unauthorized' });
   }
   return null;
