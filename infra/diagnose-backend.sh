@@ -99,7 +99,27 @@ else echo "  FAIL X-Origin-Secret mismatch → Lambda returns {\"error\":\"forbi
 
 # ---------------------------------------------------------------------------
 hr "5. CloudFront behaviors — '/${PREFIX:+$PREFIX/}api/*' must be FIRST and allow POST"
-jq '.DistributionConfig.CacheBehaviors.Items | map({PathPattern,TargetOriginId,methods:.AllowedMethods.Items})' <<<"$CFG"
+jq --arg p "/${PREFIX:+$PREFIX/}api/*" '.DistributionConfig.CacheBehaviors.Items
+  | map({PathPattern,TargetOriginId,methods:.AllowedMethods.Items,
+         CachePolicyId, OriginRequestPolicyId})' <<<"$CFG"
+echo "(managed IDs: CachingDisabled=4135ea2d-… ; AllViewerExceptHostHeader=b689b0a8-…)"
+
+# ---------------------------------------------------------------------------
+hr "5b. OAC signing config + origin headers (signature mismatch lives here)"
+if [[ -n "$OAC_ON_ORIGIN" ]]; then
+  aws cloudfront get-origin-access-control --id "$OAC_ON_ORIGIN" 2>/dev/null \
+    | jq '.OriginAccessControl.OriginAccessControlConfig | {Name, OriginAccessControlOriginType, SigningProtocol, SigningBehavior}'
+  echo "  expect: OriginAccessControlOriginType=lambda, SigningProtocol=sigv4, SigningBehavior=always"
+fi
+echo "Origin custom headers (added AFTER nothing; should only be X-Origin-Secret if any):"
+jq -r --arg id "$ORIGIN_ID" '.DistributionConfig.Origins.Items[] | select(.Id==$id) | .CustomHeaders' <<<"$CFG"
+ORP="$(jq -r --arg p "/${PREFIX:+$PREFIX/}api/*" '.DistributionConfig.CacheBehaviors.Items[] | select(.PathPattern==$p) | .OriginRequestPolicyId // ""' <<<"$CFG")"
+if [[ -n "$ORP" ]]; then
+  echo "Origin request policy $ORP forwards these headers:"
+  aws cloudfront get-origin-request-policy --id "$ORP" 2>/dev/null \
+    | jq -r '.OriginRequestPolicy.OriginRequestPolicyConfig.HeadersConfig | {behavior:.HeaderBehavior, headers:(.Headers.Items // [])}'
+  echo "  NOTE: with OAC, forwarding the Authorization header can break SigV4 signing."
+fi
 
 # ---------------------------------------------------------------------------
 hr "6. LIVE — direct Function URL with X-Api-Key (must be DENIED under AWS_IAM)"
@@ -121,6 +141,17 @@ echo "not the body, so writes pass fields as query params."
 CF_DOMAIN="$(aws cloudfront get-distribution --id "$DISTRIBUTION_ID" --query 'Distribution.DomainName' --output text 2>/dev/null)"
 if [[ -n "$CF_DOMAIN" && "$CF_DOMAIN" != "None" ]]; then
   CFURL="https://${CF_DOMAIN}/${PREFIX:+$PREFIX/}api/sessions"
+
+  # GET first (no body, no query) — isolates whether ANY signed request works.
+  echo "-- GET (list): isolates method/body from a fundamental signing problem --"
+  RG=$(curl -s -m 20 -w $'\n%{http_code}' "$CFURL" -H "X-Api-Key: $API_TOKEN")
+  CG=$(code_of "$RG"); BG=$(body_of "$RG")
+  echo "GET $CFURL -> HTTP $CG"; echo "$BG"
+  if [[ "$CG" == 200 ]]; then echo "  GET works → signing is fine; the POST issue is method/body/query-specific."
+  elif grep -qi 'signature' <<<"$BG"; then echo "  GET ALSO fails on signature → the OAC signing itself is wrong (see 5b: OAC type, or Authorization in the forwarded headers), NOT the body."
+  else echo "  GET status $CG — see body."; fi
+  echo
+
   Q="date=2000-01-01&type=technique&target=diag&darts=1&score=0&notes=diagnostic-delete-me"
   echo "POST ${CFURL}?${Q}"
   R=$(curl -s -m 20 -w $'\n%{http_code}' -X POST "${CFURL}?${Q}" -H "X-Api-Key: $API_TOKEN")
