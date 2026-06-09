@@ -388,3 +388,67 @@ button { font-family: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .np-key, .input-display.pulse, .tab { transition: none; animation: none; }
 }
+
+/* ---------- Log view ---------- */
+.field input[type="text"], .field input[type="date"], .field input[type="password"] {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+.log-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+.log-metric {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  flex: 1 1 140px;
+}
+.lm-big { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
+.lm-label { font-size: 0.75rem; color: var(--muted); }
+.log-note { flex-basis: 100%; font-size: 0.8rem; color: var(--muted); }
+.log-form { max-width: none; margin: 0 0 16px; }
+.log-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.log-status { font-size: 0.85rem; min-height: 1.2em; color: var(--muted); }
+.log-status.ok { color: #57c281; }
+.log-status.err { color: var(--accent); }
+.log-history { margin-top: 4px; }
+.log-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.log-row {
+  display: grid;
+  grid-template-columns: 5.5em 4.5em 1fr 3em 4em 3em 1.6em;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.log-row.is-test { border-left: 3px solid var(--accent); }
+.log-row .lr-score, .log-row .lr-avg { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.log-row .lr-avg { font-weight: 700; }
+.log-row .lr-type { text-transform: capitalize; }
+.lr-del {
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 0.9rem; padding: 4px;
+}
+.lr-del:hover { color: var(--accent); }
+
+@media (min-width: 920px) {
+  .log-grid { grid-template-columns: repeat(3, 1fr); }
+}

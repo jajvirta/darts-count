@@ -49,6 +49,7 @@
     practice: { el: null, tab: null, ctrl: () => global.Practice },
     trainer: { el: null, tab: null, ctrl: () => global.Trainer },
     chart: { el: null, tab: null, ctrl: () => null },
+    log: { el: null, tab: null, ctrl: () => global.Log },
   };
   let activeView = null;
 
@@ -81,6 +82,7 @@
     Numpad.init(document.getElementById('numpad'));
     Practice.init();
     Trainer.init();
+    Log.init();
 
     // One keyboard bus → active controller. Ignore when typing in form fields.
     global.addEventListener('keydown', (e) => {

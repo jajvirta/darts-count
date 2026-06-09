@@ -5,8 +5,13 @@
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1a1a2e">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Darts">
   <title>Darts Count Practice</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -16,6 +21,7 @@
       <button class="tab" data-view="practice" role="tab">Practice</button>
       <button class="tab" data-view="trainer" role="tab">Finishes</button>
       <button class="tab" data-view="chart" role="tab">Chart</button>
+      <button class="tab" data-view="log" role="tab">Log</button>
     </nav>
   </header>
 
@@ -131,11 +137,56 @@
     <div id="chartGrid" class="chart-grid"></div>
   </main>
 
+  <!-- ===================== LOG ===================== -->
+  <main id="view-log" class="view hidden" role="tabpanel">
+    <!-- Token setup (shown until a token is saved) -->
+    <div id="logTokenSetup" class="trainer-card hidden">
+      <h2>Connect</h2>
+      <p class="hint-text">Paste your API token once. It is stored only in this browser.</p>
+      <label class="field">
+        <span>API token</span>
+        <input type="password" id="logTokenInput" autocomplete="off" placeholder="bearer token">
+      </label>
+      <button class="btn-primary" id="btnLogToken">Save token</button>
+    </div>
+
+    <!-- Main log UI -->
+    <div id="logBody" class="hidden">
+      <div id="logSummary" class="log-summary"></div>
+
+      <div class="setup-card log-form">
+        <h2>Log a session</h2>
+        <div class="log-grid">
+          <label class="field"><span>Date</span><input type="date" id="logDate"></label>
+          <label class="field"><span>Type</span>
+            <select id="logType">
+              <option value="test">test (ruler: T20, 300)</option>
+              <option value="interleave">interleave</option>
+              <option value="volume">volume</option>
+              <option value="technique">technique</option>
+            </select>
+          </label>
+          <label class="field"><span>Target</span><input type="text" id="logTarget" placeholder="T20"></label>
+          <label class="field"><span>Darts</span><input type="number" id="logDarts" inputmode="numeric" min="1" placeholder="300"></label>
+          <label class="field"><span>Score</span><input type="number" id="logScore" inputmode="numeric" min="0" placeholder="total"></label>
+          <label class="field"><span>Notes</span><input type="text" id="logNotes" placeholder="optional"></label>
+        </div>
+        <button class="btn-primary" id="btnLogSave">Save session</button>
+        <div id="logStatus" class="log-status"></div>
+      </div>
+
+      <div id="logHistory" class="log-history"></div>
+    </div>
+  </main>
+
   <script src="js/checkout.js"></script>
   <script src="js/board.js"></script>
   <script src="js/numpad.js"></script>
   <script src="js/practice.js"></script>
   <script src="js/trainer.js"></script>
+  <script src="js/scoring-stats.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/log.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
