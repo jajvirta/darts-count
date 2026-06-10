@@ -365,6 +365,9 @@ button { font-family: inherit; cursor: pointer; }
   body.playing .app-header { display: none; }
   body.playing #view-practice { padding-top: 10px; }
   body.playing .stage { gap: 8px; }
+  /* With the header hidden, clear the status bar / notch so the testlog
+     header isn't cut off (viewport-fit=cover lets content go under it). */
+  body.playing #view-log { padding-top: max(14px, env(safe-area-inset-top)); }
 }
 
 /* ---------- Desktop enhancements ---------- */
@@ -455,6 +458,11 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---------- Guided TEST session (testlog) ---------- */
 .testlog { max-width: 440px; margin: 0 auto; }
+/* .btn-ghost is a 32px icon button elsewhere; here these are text buttons. */
+.testlog .btn-ghost {
+  width: auto; height: auto; margin-top: 0;
+  padding: 12px 14px; font-size: 0.95rem; font-weight: 600;
+}
 .tl-lens { display: flex; gap: 10px; align-items: center; }
 .tl-lens .btn-primary { flex: 1; }
 .tl-custom { display: flex; gap: 10px; }
