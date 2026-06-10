@@ -231,12 +231,13 @@ else
       LambdaFunctionAssociations:{Quantity:0},
       FieldLevelEncryptionId:"", SmoothStreaming:false }')"
 
-  # Add the origin if missing (else just set its OAC); put the API behavior FIRST
-  # so it out-ranks /<prefix>/*.
-  jq --argjson origin "$ORIGIN_JSON" --argjson behavior "$BEHAVIOR_JSON" \
+  # Add the origin if missing; else sync its OAC AND custom headers (so emptying
+  # ORIGIN_SECRET actually removes the X-Origin-Secret header). Put the API
+  # behavior FIRST so it out-ranks /<prefix>/*.
+  jq --argjson origin "$ORIGIN_JSON" --argjson behavior "$BEHAVIOR_JSON" --argjson ch "$CUSTOM_HEADERS" \
      --arg originId "$ORIGIN_ID" --arg pattern "$API_PATTERN" --arg oac "$OAC_ID" '
     .Origins.Items |= (if any(.Id == $originId)
-                       then map(if .Id == $originId then (.OriginAccessControlId = $oac) else . end)
+                       then map(if .Id == $originId then (.OriginAccessControlId = $oac | .CustomHeaders = $ch) else . end)
                        else . + [$origin] end)
     | .Origins.Quantity = (.Origins.Items | length)
     | .CacheBehaviors = (.CacheBehaviors // {Quantity:0, Items:[]})
