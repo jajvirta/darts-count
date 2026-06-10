@@ -9,49 +9,48 @@ backend is thin storage only.
 
 ```
 Browser (Log view)
-   │  fetch  X-Api-Key: <API_TOKEN>     (NOT Authorization — see below)
+   │  fetch  X-Api-Key: <API_TOKEN>
    ▼
-CloudFront  ──  behavior "/<prefix>/api/*"  (CachingDisabled + a CUSTOM origin
-   │            request policy: forwards X-Api-Key + query strings, NOT
-   │            Authorization/Host — see below)
-   │            OAC signs the request (SigV4) → sets the Authorization header
-   │            also injects  X-Origin-Secret: <ORIGIN_SECRET>
+CloudFront  ──  behavior "/<prefix>/api/*"  (CachingDisabled + a custom origin
+   │            request policy: forwards X-Api-Key + query strings, not Host)
+   │            injects  X-Origin-Secret: <ORIGIN_SECRET>
    ▼
-Lambda Function URL  (auth AWS_IAM; Node 20, no bundled deps — SDK from runtime)
-   │            IAM validates the OAC signature; handler checks X-Api-Key (+ secret)
+API Gateway HTTP API  (public; Lambda proxy, payload format 2.0)
+   ▼
+Lambda  (Node 20, no bundled deps — SDK from runtime)
+   │            checks X-Origin-Secret (origin guard) + X-Api-Key (user)
    ▼
 DynamoDB table  (pk="me", sk=<id>)   on-demand billing
 ```
 
 Why this shape: it reuses your existing CloudFront distribution (same-origin —
-no CORS), needs no API Gateway, and costs ~nothing at personal volume.
+no CORS) and costs ~nothing at personal volume.
 
-**Why AWS_IAM + OAC, not a public (auth NONE) Function URL:** many AWS
-Organizations apply an SCP/RCP that forbids anonymous (`principal: *`) Function
-URL invocation — you get a persistent `AccessDeniedException` no matter how
-correct the function's own policy is. With OAC, CloudFront SigV4-signs each
-request, so the caller is the in-org `cloudfront.amazonaws.com` service
-principal (scoped to your distribution), never anonymous.
+**Why API Gateway and not a Lambda Function URL.** This was hard-won. A Lambda
+Function URL could not work here:
+- *Anonymous (`auth NONE`)* URLs are blocked by the AWS Organizations guardrail
+  in this account — persistent `AccessDeniedException` no matter how correct the
+  function's own policy is.
+- *`AWS_IAM` + CloudFront OAC* (CloudFront SigV4-signs each request) authenticates
+  fine for bodyless GETs but **cannot sign a POST**: OAC signs neither the
+  request body nor (correctly) the query string, so every write failed with
+  `The request signature we calculated does not match …`. That's a CloudFront OAC
+  limitation, not a misconfiguration.
 
-**Why the user secret is `X-Api-Key`, not `Authorization`:** a Lambda Function
-URL uses the `Authorization` header for its IAM signature, and OAC sets it. If a
-client also sent `Authorization: Bearer …`, it would clobber the OAC signature
-(`The request signature we calculated does not match …`). So the user secret
-travels in `X-Api-Key`; no client should send `Authorization`. (`X-Origin-Secret`
-is now redundant given the signature, but kept as harmless defence-in-depth.)
+API Gateway is the sanctioned way to expose a Lambda, isn't subject to the
+Function-URL guardrail, and needs no request signing — so bodies and query
+strings just work. We keep it private-in-practice with the `X-Origin-Secret`
+header (only CloudFront sends it; the Lambda rejects requests without it).
 
-**Why a custom origin request policy (not `AllViewerExceptHostHeader`):** the
-managed `AllViewerExceptHostHeader` forwards *every* viewer header except `Host`
-— including `Authorization`. With OAC, forwarding `Authorization` breaks the
-SigV4 signing and **every** request fails IAM auth (GET → `Forbidden`, POST →
-`signature … does not match`), even when the client sends no `Authorization` at
-all. `backend.sh` therefore creates a custom policy that forwards only
-`X-Api-Key` plus all query strings, and neither `Authorization` nor `Host`.
+**Why the user secret is `X-Api-Key`:** convention; the Lambda reads it there.
+Writes still pass their fields in the **query string** (a carry-over that's
+harmless and keeps the client identical to the OAC era; bodies would also work
+now).
 
 ## API
 
-All under `/<prefix>/api` (e.g. `/darts/api`). Auth on every request:
-`X-Api-Key: <API_TOKEN>` (CloudFront adds the OAC signature + origin secret).
+All under `/<prefix>/api` (e.g. `/darts/api`). Every request needs
+`X-Api-Key: <API_TOKEN>`; CloudFront additionally injects `X-Origin-Secret`.
 
 | Method | Path             | Fields (query string)                  | Returns            |
 |--------|------------------|----------------------------------------|--------------------|
@@ -62,11 +61,11 @@ All under `/<prefix>/api` (e.g. `/darts/api`). Auth on every request:
 
 `type` ∈ `test | interleave | volume | technique`. Only `test` feeds the trend.
 
-**Writes carry data in the query string, not a JSON body.** CloudFront OAC signs
-the query string but *not* the request body, so a body would break the SigV4
-signature on the IAM-auth Function URL. The Lambda reads fields from
-`queryStringParameters` (and still accepts a JSON body for direct/uncached
-testing). Payloads are tiny, so the URL-length limit is a non-issue.
+**Writes carry data in the query string, not a JSON body.** This started as an
+OAC workaround (OAC doesn't sign bodies) and is kept now because it's harmless
+and the client is already written that way — with API Gateway a JSON body would
+work too. The Lambda reads fields from `queryStringParameters` (and still
+accepts a JSON body). Payloads are tiny, so URL-length limits are a non-issue.
 
 ## One-time setup
 
@@ -84,9 +83,10 @@ testing). Payloads are tiny, so the URL-length limit is a non-issue.
    aws-vault exec <profile> -- ./infra/backend.sh
    #   APPLY=1 aws-vault exec <profile> -- ./infra/backend.sh   # skip prompt
    ```
-   This creates the DynamoDB table, the IAM role, the Lambda + Function URL, and
-   adds a CloudFront origin + an **ordered** `/<prefix>/api/*` behavior placed
-   *before* the app behavior so it wins precedence.
+   This creates the DynamoDB table, the IAM role, the Lambda, a public API
+   Gateway HTTP API in front of it, and adds a CloudFront origin (pointing at
+   API Gateway) + an **ordered** `/<prefix>/api/*` behavior placed *before* the
+   app behavior so it wins precedence.
 
 3. Deploy the static files as usual (`./deploy.sh`) — the new `Log` view, the
    manifest, and the icons ship with it.
@@ -102,14 +102,14 @@ exist). Requires `aws`, `jq`, `zip`.
 
 ## Notes & caveats
 
-- **Auth is single-user and simple by design.** The `X-Api-Key` secret is a
-  shared secret, on top of the OAC signature that proves the request came from
-  your distribution — right for a personal app, not multi-tenant. Rotate by
-  changing `API_TOKEN` in `deploy.env` and re-running `backend.sh` (then
-  re-paste it in the app).
-- **Don't send an `Authorization` header to the API** from any client — OAC
-  reserves it for the SigV4 signature, and a stray one causes
-  `The request signature we calculated does not match …`. Use `X-Api-Key`.
+- **Auth is single-user and simple by design.** Two shared secrets: the
+  `X-Origin-Secret` header (CloudFront-injected; stops direct hits to the public
+  API Gateway endpoint) and the `X-Api-Key` user secret — right for a personal
+  app, not multi-tenant. Rotate `API_TOKEN`/`ORIGIN_SECRET` in `deploy.env` and
+  re-run `backend.sh` (then re-paste the token in the app).
+- **The API Gateway endpoint is public** — anyone who discovers it can reach it,
+  so `ORIGIN_SECRET` must be set (the Lambda rejects requests without the
+  matching `X-Origin-Secret`, which only CloudFront sends).
 - **DynamoDB is the single source of truth** for sessions. Enter everything via
   the app's Log tab. (The progress math lives in `public/js/scoring-stats.js`,
   which the Log view uses and which has a Node export shim for unit tests.)

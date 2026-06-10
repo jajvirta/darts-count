@@ -116,21 +116,23 @@ There are no automated tests; verify directly.
 - Both scripts source `deploy.env` and are run as
   `aws-vault exec <profile> -- ./<script>.sh`. They need `aws` and `jq`.
 - **`infra/backend.sh`** (optional, idempotent): provisions the personal
-  power-scoring backend — a DynamoDB table, an IAM role, a Node 20 Lambda +
-  Function URL (no bundled deps; AWS SDK from the runtime), and **additively** a
-  Lambda origin + an *ordered* `/<prefix>/api/*` behavior placed before the app
-  behavior. The Function URL is `AWS_IAM` and CloudFront signs requests via an
-  **OAC** (anonymous/`NONE` Function URLs are blocked by the org guardrail). The
-  user secret (`API_TOKEN`) travels in the **`X-Api-Key`** header — *not*
-  `Authorization`, which OAC reserves for its SigV4 signature. The behavior uses
-  a **custom origin request policy** forwarding `X-Api-Key` + query strings but
-  NOT `Authorization` (forwarding it breaks OAC signing) or `Host`; writes carry
-  fields in the **query string**, not a body (OAC doesn't sign bodies). Same conventions
-  as `bootstrap.sh` (prints the plan, prompts before mutating the distribution,
-  `APPLY=1` skips). Test the jq distribution transform against synthetic
-  `get-distribution-config` output before applying. `infra/migrate-to-oac.sh`
-  switches an existing auth-`NONE` deployment over; `infra/diagnose-backend.sh`
-  troubleshoots 403s. Full runbook in `infra/BACKEND.md`. Needs `aws`, `jq`, `zip`.
+  power-scoring backend — a DynamoDB table, an IAM role, a Node 20 Lambda (no
+  bundled deps; AWS SDK from the runtime), a **public API Gateway HTTP API**
+  (Lambda proxy, payload format 2.0) in front of it, and **additively** a
+  CloudFront origin pointing at API Gateway + an *ordered* `/<prefix>/api/*`
+  behavior placed before the app behavior. **Not a Lambda Function URL:**
+  anonymous URLs are blocked by the org guardrail, and OAC-signed `AWS_IAM` URLs
+  can't sign POST bodies/query strings (a long debugging saga — see
+  `infra/BACKEND.md`). The API is public; access is gated by the
+  **`X-Origin-Secret`** header (CloudFront-injected; the Lambda rejects requests
+  without it) plus the **`X-Api-Key`** user secret. The behavior uses a custom
+  origin request policy forwarding `X-Api-Key` + query strings, not `Host`.
+  Writes pass fields in the **query string** (an OAC-era carry-over; bodies work
+  too now). Same conventions as `bootstrap.sh` (prints the plan, prompts before
+  mutating the distribution, `APPLY=1` skips). Test the jq distribution transform
+  against synthetic `get-distribution-config` output before applying.
+  `infra/diagnose-backend.sh` troubleshoots the path. Full runbook in
+  `infra/BACKEND.md`. Needs `aws`, `jq`, `zip`.
 
 ## Conventions
 

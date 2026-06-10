@@ -4,16 +4,15 @@
 #   1. a DynamoDB table (on-demand) holding sessions
 #   2. an IAM role for the Lambda (basic logs + table access)
 #   3. a Node 20 Lambda (no bundled deps; AWS SDK from the runtime)
-#   4. a Lambda Function URL (auth AWS_IAM) + a CloudFront OAC that SigV4-signs
-#      requests, with invoke scoped to the CloudFront principal + this dist.
-#      (AWS_IAM, not anonymous, because some AWS Org guardrails forbid public
-#      Function URLs. A bearer token still gates the app; an optional
-#      X-Origin-Secret header is now redundant but harmless.)
-#   5. a custom origin request policy that forwards X-Api-Key + query strings but
-#      NOT Authorization (OAC reserves it for the signature) or Host
-#   6. on your EXISTING distribution: a Lambda origin (with the OAC attached) +
-#      an ORDERED cache behavior for the API path (using that policy), inserted
-#      BEFORE the app one
+#   4. a public API Gateway HTTP API (Lambda proxy, payload format 2.0) fronting
+#      the Lambda — NOT a Lambda Function URL (anonymous URLs are blocked by the
+#      AWS Org guardrail, and OAC-signed AWS_IAM URLs can't sign POST
+#      bodies/query strings). Access is gated by the X-Origin-Secret header
+#      (CloudFront-injected) + the X-Api-Key user secret, checked in the Lambda.
+#   5. a custom origin request policy that forwards X-Api-Key + query strings
+#      (not Host, so CloudFront sets the API Gateway host)
+#   6. on your EXISTING distribution: a custom origin pointing at API Gateway +
+#      an ORDERED cache behavior for the API path, inserted BEFORE the app one
 #
 # Safe to re-run: updates the function code/config, and only mutates the
 # distribution when the origin (incl. its OAC) or behavior are missing.
@@ -43,8 +42,8 @@ command -v zip >/dev/null || { echo "zip is required"; exit 1; }
 PREFIX="${PATH_PATTERN%/\*}"; PREFIX="${PREFIX#/}"
 if [[ -n "$PREFIX" ]]; then API_PATTERN="/${PREFIX}/api/*"; else API_PATTERN="/api/*"; fi
 
-ORIGIN_ID="lambda-${LAMBDA_NAME}"
-OAC_NAME="${LAMBDA_NAME}-oac"
+ORIGIN_ID="lambda-${LAMBDA_NAME}"   # CloudFront origin id (now points at API Gateway)
+API_NAME="${API_NAME:-${LAMBDA_NAME}-http}"
 ORP_NAME="${LAMBDA_NAME}-orp"
 CACHING_DISABLED="4135ea2d-6df8-44a3-9df3-4b5a84be39ad"           # AWS managed
 
@@ -55,14 +54,14 @@ DIST_ARN="arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${DISTRIBUTION_ID}"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
-if [[ -n "$ORIGIN_SECRET" ]]; then GUARD_DESC="X-Origin-Secret enabled"; else GUARD_DESC="none (bearer only)"; fi
+if [[ -n "$ORIGIN_SECRET" ]]; then GUARD_DESC="X-Origin-Secret enabled"; else GUARD_DESC="NONE — set ORIGIN_SECRET (API Gateway is public; this gates it)"; fi
 echo "Account:      $ACCOUNT_ID"
 echo "Region:       $REGION"
 echo "Distribution: $DISTRIBUTION_ID"
 echo "Table:        $TABLE_NAME"
 echo "Lambda:       $LAMBDA_NAME (role $LAMBDA_ROLE)"
 echo "API path:     $API_PATTERN"
-echo "Auth model:   CloudFront OAC (Function URL = AWS_IAM, SigV4-signed)"
+echo "Auth model:   CloudFront -> API Gateway (public), gated by X-Origin-Secret + X-Api-Key"
 echo "Origin guard: $GUARD_DESC"
 echo
 
@@ -121,45 +120,43 @@ else
 fi
 aws lambda wait function-active-v2 --function-name "$LAMBDA_NAME" --region "$REGION"
 
-# ---------- 4. Function URL (AWS_IAM) + Origin Access Control ----------
-# Anonymous (auth NONE) Function URLs are blocked by some AWS Organizations
-# guardrails (persistent AccessDeniedException). So the URL uses AWS_IAM and
-# CloudFront signs every request via an OAC — the caller is the in-org
-# cloudfront.amazonaws.com service principal, never anonymous.
-if aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" >/dev/null 2>&1; then
-  echo "==> Ensuring Function URL auth type = AWS_IAM"
-  aws lambda update-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" \
-    --auth-type AWS_IAM >/dev/null
+# ---------- 4. API Gateway HTTP API + origin request policy ----------
+# A public HTTP API (payload format 2.0 — the same event shape the handler
+# already uses) fronts the Lambda. We deliberately do NOT use a Lambda Function
+# URL: anonymous (auth NONE) URLs are blocked by the AWS Org guardrail, and the
+# OAC-signed (AWS_IAM) alternative can't sign POST bodies/query strings.
+# CloudFront reaches the API over HTTPS; access is gated by the X-Origin-Secret
+# header (only CloudFront sends it) + the X-Api-Key user secret, both checked in
+# the Lambda — so set ORIGIN_SECRET in deploy.env (it is load-bearing now).
+LAMBDA_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${LAMBDA_NAME}"
+API_ID="$(aws apigatewayv2 get-apis --region "$REGION" \
+  --query "Items[?Name=='${API_NAME}'].ApiId | [0]" --output text 2>/dev/null || true)"
+if [[ -z "$API_ID" || "$API_ID" == "None" ]]; then
+  echo "==> Creating HTTP API $API_NAME (Lambda proxy, \$default route + auto-deploy stage)"
+  API_ID="$(aws apigatewayv2 create-api --region "$REGION" --name "$API_NAME" \
+    --protocol-type HTTP --target "$LAMBDA_ARN" --query ApiId --output text)"
+  # quick-create also wires the AWS_PROXY integration (payload 2.0), the
+  # $default route + auto-deploy $default stage, and an invoke permission.
 else
-  echo "==> Creating Function URL (auth AWS_IAM)"
-  aws lambda create-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" \
-    --auth-type AWS_IAM >/dev/null
+  echo "==> HTTP API $API_NAME exists ($API_ID)"
 fi
+# Ensure the invoke permission (idempotent; harmless if quick-create added one).
+aws lambda add-permission --function-name "$LAMBDA_NAME" --region "$REGION" \
+  --statement-id ApiGatewayInvoke --action lambda:InvokeFunction \
+  --principal apigateway.amazonaws.com \
+  --source-arn "arn:aws:execute-api:${REGION}:${ACCOUNT_ID}:${API_ID}/*/*" >/dev/null 2>&1 || true
+API_HOST="${API_ID}.execute-api.${REGION}.amazonaws.com"
+echo "    API host: $API_HOST"
 
-# OAC (type lambda) that SigV4-signs CloudFront -> Function URL requests.
-OAC_ID="$(aws cloudfront list-origin-access-controls \
-  --query "OriginAccessControlList.Items[?Name=='${OAC_NAME}'].Id | [0]" --output text 2>/dev/null || true)"
-if [[ -z "$OAC_ID" || "$OAC_ID" == "None" ]]; then
-  echo "==> Creating Origin Access Control $OAC_NAME (type lambda)"
-  OAC_ID="$(aws cloudfront create-origin-access-control \
-    --origin-access-control-config \
-    "Name=${OAC_NAME},SigningProtocol=sigv4,SigningBehavior=always,OriginAccessControlOriginType=lambda" \
-    --query 'OriginAccessControl.Id' --output text)"
-else
-  echo "==> OAC $OAC_NAME exists ($OAC_ID)"
-fi
-
-# Custom origin request policy: forward X-Api-Key + all query strings, but NOT
-# the Authorization header (OAC reserves it for the SigV4 signature; forwarding
-# it — as the managed AllViewerExceptHostHeader does — breaks OAC signing and
-# every request fails IAM auth) and NOT Host (CloudFront sets the origin host).
+# Origin request policy: forward X-Api-Key + all query strings, but NOT Host (so
+# CloudFront sets Host to the API Gateway domain, which API Gateway requires).
 ORP_ID="$(aws cloudfront list-origin-request-policies --type custom \
   --query "OriginRequestPolicyList.Items[?OriginRequestPolicy.OriginRequestPolicyConfig.Name=='${ORP_NAME}'].OriginRequestPolicy.Id | [0]" \
   --output text 2>/dev/null || true)"
 if [[ -z "$ORP_ID" || "$ORP_ID" == "None" ]]; then
-  echo "==> Creating origin request policy $ORP_NAME (X-Api-Key + query strings, no Authorization)"
+  echo "==> Creating origin request policy $ORP_NAME (X-Api-Key + query strings)"
   ORP_CFG="$(jq -n --arg name "$ORP_NAME" '
-    { Name:$name, Comment:"OAC-safe: forward X-Api-Key + query strings, not Authorization/Host",
+    { Name:$name, Comment:"forward X-Api-Key + query strings, not Host",
       HeadersConfig:{ HeaderBehavior:"whitelist", Headers:{ Quantity:1, Items:["x-api-key"] } },
       CookiesConfig:{ CookieBehavior:"none" },
       QueryStringsConfig:{ QueryStringBehavior:"all" } }')"
@@ -170,52 +167,32 @@ else
   echo "==> Origin request policy $ORP_NAME exists ($ORP_ID)"
 fi
 
-# Invoke permission: ONLY the CloudFront service principal, scoped to this
-# distribution. Drop any earlier public-invoke statement. add-permission errors
-# if the statement already exists — treat ONLY that as benign.
-echo "==> Ensuring CloudFront-scoped invoke permission"
-aws lambda remove-permission --function-name "$LAMBDA_NAME" --region "$REGION" \
-  --statement-id FunctionURLPublicInvoke >/dev/null 2>&1 || true
-if ! aws lambda add-permission --function-name "$LAMBDA_NAME" --region "$REGION" \
-       --statement-id AllowCloudFrontServicePrincipal --action lambda:InvokeFunctionUrl \
-       --principal cloudfront.amazonaws.com --source-arn "$DIST_ARN" >/dev/null 2>"$TMP/addperm.err"; then
-  if grep -qi "ResourceConflictException\|already exists" "$TMP/addperm.err"; then
-    echo "    (permission already present)"
-  else
-    echo "add-permission failed:"; cat "$TMP/addperm.err"; exit 1
-  fi
-fi
-
-FN_URL="$(aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --region "$REGION" --query FunctionUrl --output text)"
-FN_HOST="${FN_URL#https://}"; FN_HOST="${FN_HOST%/}"
-echo "    function URL host: $FN_HOST"
-
 # ---------- 5. CloudFront origin + ordered behavior ----------
 echo "==> Fetching distribution config"
 aws cloudfront get-distribution-config --id "$DISTRIBUTION_ID" > "$TMP/dist.json"
 ETAG="$(jq -r '.ETag' "$TMP/dist.json")"
 jq '.DistributionConfig' "$TMP/dist.json" > "$TMP/config.json"
 
+ORIGIN_DOMAIN="$(jq -r --arg id "$ORIGIN_ID" '(.Origins.Items[] | select(.Id==$id) | .DomainName) // ""' "$TMP/config.json")"
 ORIGIN_OAC="$(jq -r --arg id "$ORIGIN_ID" '(.Origins.Items[] | select(.Id==$id) | .OriginAccessControlId) // ""' "$TMP/config.json")"
 HAVE_BEHAVIOR="$(jq --arg p "$API_PATTERN" '((.CacheBehaviors.Items // [])[] | select(.PathPattern == $p)) // empty | true' "$TMP/config.json")"
 BEHAVIOR_ORP="$(jq -r --arg p "$API_PATTERN" '((.CacheBehaviors.Items // [])[] | select(.PathPattern == $p) | .OriginRequestPolicyId) // ""' "$TMP/config.json")"
 LIVE_ORIGIN_SECRET="$(jq -r --arg id "$ORIGIN_ID" '(.Origins.Items[] | select(.Id==$id) | (.CustomHeaders.Items[]? | select(.HeaderName=="X-Origin-Secret") | .HeaderValue)) // ""' "$TMP/config.json")"
 
-if [[ "$ORIGIN_OAC" == "$OAC_ID" && "$HAVE_BEHAVIOR" == "true" && "$BEHAVIOR_ORP" == "$ORP_ID" && "$LIVE_ORIGIN_SECRET" == "$ORIGIN_SECRET" ]]; then
-  echo "==> Distribution already has the API origin (with OAC) + behavior (correct policy) — nothing to change."
+if [[ "$ORIGIN_DOMAIN" == "$API_HOST" && -z "$ORIGIN_OAC" && "$HAVE_BEHAVIOR" == "true" && "$BEHAVIOR_ORP" == "$ORP_ID" && "$LIVE_ORIGIN_SECRET" == "$ORIGIN_SECRET" ]]; then
+  echo "==> Distribution already points the API origin at API Gateway with the right policy — nothing to change."
 else
   if [[ -n "$ORIGIN_SECRET" ]]; then
     CUSTOM_HEADERS="$(jq -n --arg v "$ORIGIN_SECRET" '{Quantity:1,Items:[{HeaderName:"X-Origin-Secret",HeaderValue:$v}]}')"
   else
     CUSTOM_HEADERS='{"Quantity":0}'
   fi
-  ORIGIN_JSON="$(jq -n --arg id "$ORIGIN_ID" --arg domain "$FN_HOST" --arg oac "$OAC_ID" --argjson ch "$CUSTOM_HEADERS" '
+  ORIGIN_JSON="$(jq -n --arg id "$ORIGIN_ID" --arg domain "$API_HOST" --argjson ch "$CUSTOM_HEADERS" '
     { Id:$id, DomainName:$domain, OriginPath:"",
       CustomHeaders:$ch,
       CustomOriginConfig:{ HTTPPort:80, HTTPSPort:443, OriginProtocolPolicy:"https-only",
         OriginSslProtocols:{Quantity:1,Items:["TLSv1.2"]},
         OriginReadTimeout:30, OriginKeepaliveTimeout:5 },
-      OriginAccessControlId:$oac,
       ConnectionAttempts:3, ConnectionTimeout:10,
       OriginShield:{Enabled:false} }')"
   BEHAVIOR_JSON="$(jq -n --arg origin "$ORIGIN_ID" --arg pattern "$API_PATTERN" \
@@ -231,13 +208,12 @@ else
       LambdaFunctionAssociations:{Quantity:0},
       FieldLevelEncryptionId:"", SmoothStreaming:false }')"
 
-  # Add the origin if missing; else sync its OAC AND custom headers (so emptying
-  # ORIGIN_SECRET actually removes the X-Origin-Secret header). Put the API
-  # behavior FIRST so it out-ranks /<prefix>/*.
-  jq --argjson origin "$ORIGIN_JSON" --argjson behavior "$BEHAVIOR_JSON" --argjson ch "$CUSTOM_HEADERS" \
-     --arg originId "$ORIGIN_ID" --arg pattern "$API_PATTERN" --arg oac "$OAC_ID" '
+  # Replace the origin wholesale if it exists (drops any old OAC / Function-URL
+  # domain), else add it; put the API behavior FIRST so it out-ranks /<prefix>/*.
+  jq --argjson origin "$ORIGIN_JSON" --argjson behavior "$BEHAVIOR_JSON" \
+     --arg originId "$ORIGIN_ID" --arg pattern "$API_PATTERN" '
     .Origins.Items |= (if any(.Id == $originId)
-                       then map(if .Id == $originId then (.OriginAccessControlId = $oac | .CustomHeaders = $ch) else . end)
+                       then map(if .Id == $originId then $origin else . end)
                        else . + [$origin] end)
     | .Origins.Quantity = (.Origins.Items | length)
     | .CacheBehaviors = (.CacheBehaviors // {Quantity:0, Items:[]})
@@ -246,7 +222,7 @@ else
   ' "$TMP/config.json" > "$TMP/config-new.json"
 
   echo "==> Planned change to distribution $DISTRIBUTION_ID:"
-  echo "    + origin '$ORIGIN_ID' -> $FN_HOST (https-only, OAC $OAC_ID)"
+  echo "    + origin '$ORIGIN_ID' -> $API_HOST (https-only, API Gateway, no OAC)"
   echo "    + ordered behavior '$API_PATTERN' -> '$ORIGIN_ID' (CachingDisabled, first in precedence)"
 
   if [[ "${APPLY:-}" != "1" ]]; then
