@@ -195,8 +195,9 @@ jq '.DistributionConfig' "$TMP/dist.json" > "$TMP/config.json"
 ORIGIN_OAC="$(jq -r --arg id "$ORIGIN_ID" '(.Origins.Items[] | select(.Id==$id) | .OriginAccessControlId) // ""' "$TMP/config.json")"
 HAVE_BEHAVIOR="$(jq --arg p "$API_PATTERN" '((.CacheBehaviors.Items // [])[] | select(.PathPattern == $p)) // empty | true' "$TMP/config.json")"
 BEHAVIOR_ORP="$(jq -r --arg p "$API_PATTERN" '((.CacheBehaviors.Items // [])[] | select(.PathPattern == $p) | .OriginRequestPolicyId) // ""' "$TMP/config.json")"
+LIVE_ORIGIN_SECRET="$(jq -r --arg id "$ORIGIN_ID" '(.Origins.Items[] | select(.Id==$id) | (.CustomHeaders.Items[]? | select(.HeaderName=="X-Origin-Secret") | .HeaderValue)) // ""' "$TMP/config.json")"
 
-if [[ "$ORIGIN_OAC" == "$OAC_ID" && "$HAVE_BEHAVIOR" == "true" && "$BEHAVIOR_ORP" == "$ORP_ID" ]]; then
+if [[ "$ORIGIN_OAC" == "$OAC_ID" && "$HAVE_BEHAVIOR" == "true" && "$BEHAVIOR_ORP" == "$ORP_ID" && "$LIVE_ORIGIN_SECRET" == "$ORIGIN_SECRET" ]]; then
   echo "==> Distribution already has the API origin (with OAC) + behavior (correct policy) — nothing to change."
 else
   if [[ -n "$ORIGIN_SECRET" ]]; then
