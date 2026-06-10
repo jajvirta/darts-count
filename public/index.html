@@ -154,6 +154,8 @@
     <div id="logBody" class="hidden">
       <div id="logSummary" class="log-summary"></div>
 
+      <button class="btn-primary big" id="btnStartTestlog">▶ Start TEST session (per-visit)</button>
+
       <div class="setup-card log-form">
         <h2>Log a session</h2>
         <div class="log-grid">
@@ -177,6 +179,49 @@
 
       <div id="logHistory" class="log-history"></div>
     </div>
+
+    <!-- Guided per-visit TEST session entry (mode within the Log tab) -->
+    <div id="testlogPanel" class="testlog hidden">
+      <!-- Start screen: pick length -->
+      <div id="testlogStart" class="setup-card">
+        <h2>TEST session</h2>
+        <p class="hint-text">Enter each 3-dart total (0–180). Pick a length.</p>
+        <div class="tl-lens">
+          <button class="btn-primary" data-len="100">100 visits</button>
+          <button class="btn-ghost" data-len="50">50</button>
+          <button class="btn-ghost" data-len="20">20</button>
+        </div>
+        <div class="tl-custom">
+          <input type="number" id="tlLenInput" inputmode="numeric" min="1" max="100" placeholder="custom (1–100)">
+          <button class="btn-ghost" id="btnTlCustom">Start</button>
+        </div>
+        <div id="tlResume" class="tl-resume hidden">
+          <span>Unfinished session: <b id="tlResumeInfo"></b></span>
+          <button class="btn-primary" id="btnTlResume">Resume</button>
+          <button class="btn-ghost" id="btnTlDiscard">Discard</button>
+        </div>
+      </div>
+
+      <!-- Entry screen -->
+      <div id="testlogEntry" class="hidden">
+        <div class="tl-head">
+          <div class="tl-stat"><div class="tl-big" id="tlTotal">0</div><div class="tl-lbl">total</div></div>
+          <div class="tl-stat"><div class="tl-big" id="tlAvg">—</div><div class="tl-lbl">3-dart avg</div></div>
+          <div class="tl-stat"><div class="tl-big" id="tlLeft">0</div><div class="tl-lbl">left</div></div>
+          <div class="tl-stat"><div class="tl-big" id="tlCount">0/0</div><div class="tl-lbl">done</div></div>
+        </div>
+        <div id="tlInput" class="tl-input">—</div>
+        <div id="testlogPad" class="numpad tl-pad"></div>
+        <ul id="tlList" class="tl-list"></ul>
+        <label class="field"><span>Notes</span><input type="text" id="tlNotes" placeholder="optional"></label>
+        <div class="tl-actions">
+          <button class="btn-ghost" id="btnTlCancel">Cancel</button>
+          <button class="btn-ghost" id="btnTlUndo">Undo</button>
+          <button class="btn-primary" id="btnTlConfirm">Save now (0)</button>
+        </div>
+        <div id="tlStatus" class="log-status"></div>
+      </div>
+    </div>
   </main>
 
   <script src="js/checkout.js"></script>
@@ -186,6 +231,7 @@
   <script src="js/trainer.js"></script>
   <script src="js/scoring-stats.js"></script>
   <script src="js/store.js"></script>
+  <script src="js/testlog.js"></script>
   <script src="js/log.js"></script>
   <script src="js/app.js"></script>
 </body>

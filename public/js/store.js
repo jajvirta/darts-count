@@ -1,9 +1,8 @@
 /* ============================================================
- * store.js — remote session store (talks to the Lambda API).
- * Same-origin: the API lives at "<app dir>/api/*" behind CloudFront,
- * so no CORS. Auth is a secret the user pastes once (kept in
- * Settings/localStorage), sent in the X-Api-Key header — NOT
- * Authorization, which CloudFront OAC reserves for its SigV4 signature.
+ * store.js — remote session store (talks to the Lambda API via API Gateway).
+ * Same-origin: the API lives at "<app dir>/api/*" behind CloudFront, so no
+ * CORS. Auth is a secret the user pastes once (kept in Settings/localStorage),
+ * sent in the X-Api-Key header. Writes send a JSON body.
  * All methods return promises. Exposes window.Store.
  * ============================================================ */
 (function (global) {
@@ -45,18 +44,11 @@
       return res.status === 204 ? null : res.json();
     },
 
-    // Writes send fields as a query string (not a JSON body): CloudFront OAC
-    // signs the query string but not the body, so a body would break the SigV4
-    // signature on the IAM-auth Function URL.
-    _qs(s) {
-      return new URLSearchParams({
-        date: s.date, type: s.type, target: s.target,
-        darts: s.darts, score: s.score, notes: s.notes || '',
-      }).toString();
-    },
+    // Writes send a JSON body (API Gateway handles it — no signing). This
+    // cleanly carries a per-visit array; darts/score are derived server-side.
     async list() { return (await this._req('GET', '/sessions')).sessions; },
-    async create(s) { return (await this._req('POST', '/sessions?' + this._qs(s))).session; },
-    async update(id, s) { return (await this._req('PUT', '/sessions/' + encodeURIComponent(id) + '?' + this._qs(s))).session; },
+    async create(s) { return (await this._req('POST', '/sessions', s)).session; },
+    async update(id, s) { return (await this._req('PUT', '/sessions/' + encodeURIComponent(id), s)).session; },
     async remove(id) { return this._req('DELETE', '/sessions/' + encodeURIComponent(id)); },
   };
 

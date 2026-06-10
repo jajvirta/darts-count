@@ -491,6 +491,9 @@
   }
 
   function onActivate() {
+    // The Numpad is a singleton; TestLog may have re-pointed it to its own pad.
+    // Re-bind it to the practice keypad on every activation.
+    Numpad.init(document.getElementById('numpad'));
     Numpad.setHandlers({ digit: onDigit, backspace: onBackspace, enter: onEnter });
     Board.resize(started ? (phase === 'answered' ? currentDarts
       : (mode === 'finishing' ? currentDarts : currentDarts.slice(0, revealed))) : []);

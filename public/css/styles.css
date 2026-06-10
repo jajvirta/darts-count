@@ -452,3 +452,47 @@ button { font-family: inherit; cursor: pointer; }
 @media (min-width: 920px) {
   .log-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ---------- Guided TEST session (testlog) ---------- */
+.testlog { max-width: 440px; margin: 0 auto; }
+.tl-lens { display: flex; gap: 10px; align-items: center; }
+.tl-lens .btn-primary { flex: 1; }
+.tl-custom { display: flex; gap: 10px; }
+.tl-custom input { flex: 1; }
+.tl-resume {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 0.9rem;
+}
+.tl-head {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  text-align: center; margin-bottom: 10px;
+}
+.tl-stat { background: var(--card); border-radius: 10px; padding: 8px 4px; }
+.tl-big { font-size: 1.5rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.tl-lbl { font-size: 0.7rem; color: var(--muted); }
+.tl-input {
+  text-align: center; font-size: 2.2rem; font-weight: 700; min-height: 1.4em;
+  color: var(--text); font-variant-numeric: tabular-nums; margin: 4px 0 10px;
+}
+.tl-input.editing { color: var(--accent); font-size: 1.4rem; }
+.tl-pad { margin: 0 auto 12px; }
+.tl-list {
+  list-style: none; padding: 0; margin: 0 0 12px; max-height: 30vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.tl-row {
+  display: grid; grid-template-columns: 2.5em 1fr 2em; align-items: center; gap: 8px;
+  background: var(--card); border-radius: 6px; padding: 2px 8px; font-size: 0.9rem;
+}
+.tl-row.editing { outline: 2px solid var(--accent); }
+.tl-i { color: var(--muted); font-size: 0.75rem; }
+.tl-v {
+  background: none; border: none; color: var(--text); text-align: left;
+  font-size: 1rem; font-variant-numeric: tabular-nums; cursor: pointer; padding: 6px 0;
+}
+.tl-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; }
+.tl-x:hover { color: var(--accent); }
+.tl-actions { display: flex; gap: 10px; align-items: center; }
+.tl-actions .btn-primary { flex: 1; }
+.btn-primary.ready { animation: pulse-ready 1.2s ease-in-out infinite; }
+@keyframes pulse-ready { 50% { background: var(--accent-dark); } }

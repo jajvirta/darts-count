@@ -134,17 +134,22 @@
         const b = e.target.closest('.lr-del');
         if (b) del(b.getAttribute('data-id'));
       });
+      const startBtn = $('btnStartTestlog');
+      if (startBtn) startBtn.addEventListener('click', () => global.TestLog && TestLog.start());
       // Defaults for fast entry.
       els.date.value = todayISO();
       if (!els.target.value) els.target.value = 'T20';
       if (!els.darts.value) els.darts.value = '300';
     },
     onActivate() {
+      if (global.TestLog && TestLog.isActive()) { TestLog.reattach(); return; }
       showConfig();
       els.date.value = todayISO();
       refresh();
     },
     onDeactivate() {},
-    onKey() {},
+    onKey(e) {
+      if (global.TestLog && TestLog.isActive()) { TestLog.onKey(e); }
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

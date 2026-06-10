@@ -58,12 +58,38 @@ export function validateSession(obj) {
   if (!TYPES.has(type)) return { ok: false, error: 'type must be one of ' + [...TYPES].join(', ') };
   const target = String(obj.target || '').trim();
   if (!target || /\s/.test(target)) return { ok: false, error: 'target must be a non-empty token with no spaces' };
-  const darts = Number(obj.darts);
-  if (!Number.isInteger(darts) || darts <= 0) return { ok: false, error: 'darts must be a positive integer' };
-  const score = Number(obj.score);
-  if (!Number.isFinite(score) || score < 0) return { ok: false, error: 'score must be a non-negative number' };
   const notes = obj.notes == null ? '' : String(obj.notes).slice(0, 500);
-  return { ok: true, value: { date, type, target, darts, score, notes } };
+
+  // Optional per-visit detail (the 3-dart totals). When present, darts and
+  // score are DERIVED from it. Accepts an array or a comma-separated string.
+  let visits;
+  if (obj.visits != null && obj.visits !== '') {
+    let raw = obj.visits;
+    if (typeof raw === 'string') raw = raw.split(',');
+    if (!Array.isArray(raw)) return { ok: false, error: 'visits must be an array' };
+    if (raw.length < 1 || raw.length > 100) return { ok: false, error: 'visits length must be 1–100' };
+    visits = [];
+    for (const v of raw) {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 180) return { ok: false, error: 'each visit must be an integer 0–180' };
+      visits.push(n);
+    }
+  }
+
+  let darts, score;
+  if (visits) {
+    darts = visits.length * 3;
+    score = visits.reduce((a, b) => a + b, 0);
+  } else {
+    darts = Number(obj.darts);
+    if (!Number.isInteger(darts) || darts <= 0) return { ok: false, error: 'darts must be a positive integer' };
+    score = Number(obj.score);
+    if (!Number.isFinite(score) || score < 0) return { ok: false, error: 'score must be a non-negative number' };
+  }
+
+  const value = { date, type, target, darts, score, notes };
+  if (visits) value.visits = visits;
+  return { ok: true, value };
 }
 
 // Map (method, path-after-/api) -> a route descriptor. Pure.

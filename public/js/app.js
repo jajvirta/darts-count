@@ -82,6 +82,7 @@
     Numpad.init(document.getElementById('numpad'));
     Practice.init();
     Trainer.init();
+    TestLog.init();
     Log.init();
 
     // One keyboard bus → active controller. Ignore when typing in form fields.
