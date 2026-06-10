@@ -98,7 +98,11 @@ aws iam put-role-policy --role-name "$LAMBDA_ROLE" \
 # ---------- 3. Lambda function ----------
 echo "==> Packaging function"
 ( cd "$SCRIPT_DIR/infra/lambda" && zip -q "$TMP/fn.zip" index.mjs )
-ENV_VARS="Variables={TABLE_NAME=${TABLE_NAME},API_TOKEN=${API_TOKEN},ORIGIN_SECRET=${ORIGIN_SECRET}}"
+# Build the env as JSON (the Variables={k=v,…} shorthand can't express an empty
+# value, which breaks when ORIGIN_SECRET is blank). Omit ORIGIN_SECRET entirely
+# when empty so the handler's guard is simply disabled.
+ENV_VARS="$(jq -n --arg t "$TABLE_NAME" --arg k "$API_TOKEN" --arg o "$ORIGIN_SECRET" \
+  '{Variables: ({TABLE_NAME:$t, API_TOKEN:$k} + (if $o=="" then {} else {ORIGIN_SECRET:$o} end))}')"
 
 if aws lambda get-function --function-name "$LAMBDA_NAME" --region "$REGION" >/dev/null 2>&1; then
   echo "==> Updating function code + config"
