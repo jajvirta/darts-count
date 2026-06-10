@@ -402,24 +402,27 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 1rem;
 }
 .log-summary {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  align-items: stretch;
   margin-bottom: 16px;
 }
-.log-metric {
+.lp-card {
   background: var(--card);
   border-radius: 12px;
-  padding: 14px 18px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  min-width: 140px;
-  flex: 1 1 140px;
+  gap: 4px;
 }
-.lm-big { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
-.lm-label { font-size: 0.75rem; color: var(--muted); }
-.log-note { flex-basis: 100%; font-size: 0.8rem; color: var(--muted); }
+.lp-row { display: flex; align-items: baseline; gap: 6px; }
+.lp-big { font-size: 2rem; font-weight: 700; color: var(--accent); line-height: 1; font-variant-numeric: tabular-nums; }
+.lp-unit { font-size: 0.75rem; color: var(--muted); }
+.lp-sub { font-size: 0.72rem; color: var(--muted); }
+.lp-cap { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.spark { width: 100%; height: 38px; display: block; margin-top: 4px; }
+@media (max-width: 520px) { .log-summary { grid-template-columns: 1fr; } }
+.log-note { font-size: 0.8rem; color: var(--muted); }
 .log-form { max-width: none; margin: 0 0 16px; }
 .log-grid {
   display: grid;

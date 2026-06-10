@@ -39,24 +39,63 @@
     }
   }
 
+  // --- inline-SVG sparklines (no deps; full-width, crisp stroke) ----------
+  const SPARK_W = 240, SPARK_H = 36;
+  function barSpark(values) {
+    const n = values.length; if (!n) return '';
+    const gap = n > 60 ? 0.5 : 1;
+    const max = Math.max(1, ...values);
+    const bw = (SPARK_W - (n - 1) * gap) / n;
+    const bars = values.map((val, i) => {
+      const bh = val > 0 ? Math.max(1.5, (val / max) * (SPARK_H - 2)) : 0;
+      const x = i * (bw + gap);
+      const fill = i === n - 1 ? 'var(--accent)' : 'var(--line)';
+      return `<rect x="${x.toFixed(1)}" y="${(SPARK_H - bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+    }).join('');
+    return `<svg class="spark" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" aria-hidden="true">${bars}</svg>`;
+  }
+  function lineSpark(values) {
+    const n = values.length; if (n < 2) return '';
+    const min = Math.min(...values), max = Math.max(...values), span = (max - min) || 1, pad = 4;
+    const x = i => (i / (n - 1)) * SPARK_W;
+    const y = val => pad + (1 - (val - min) / span) * (SPARK_H - 2 * pad);
+    const pts = values.map((val, i) => `${x(i).toFixed(1)},${y(val).toFixed(1)}`).join(' ');
+    return `<svg class="spark" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" aria-hidden="true">` +
+      `<polyline fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="${pts}"/>` +
+      `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(values[n - 1]).toFixed(1)}" r="3" fill="var(--accent)" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+
   function renderSummary() {
-    const r = ScoringStats.analyze(sessions, { roll: 5, weeklyAim: 2000, weeklyFloor: 1200 });
+    const r = ScoringStats.analyze(sessions, { roll: 5, weeklyAim: 2000, weeklyFloor: 1200, days: 30 });
     const v = r.volume, p = r.progress;
     const vol = v.onAim ? 'on aim ✓' : v.aboveFloor ? 'above floor' : 'below floor';
+
+    // Volume card: last-7d darts (big) + 30-day daily-darts bars.
     let html =
-      `<div class="log-metric"><span class="lm-big">${r0(v.last7)}</span>` +
-      `<span class="lm-label">darts · last 7d (${vol})</span></div>`;
+      '<div class="lp-card">' +
+        `<div class="lp-row"><span class="lp-big">${r0(v.last7)}</span><span class="lp-unit">darts · 7d</span></div>` +
+        `<div class="lp-sub">${vol} · ${v.sessions} sessions · ${r0(v.totalDarts)} all-time</div>` +
+        barSpark(v.daily.map(d => d.darts)) +
+        '<div class="lp-cap">daily darts · last 30d</div>' +
+      '</div>';
+
+    // Level card: rolling TEST average (big) + rolling-average line.
+    html += '<div class="lp-card">';
     if (p.tests >= 2) {
+      const trend = p.trendKnown
+        ? `${p.trendPerMonth >= 0 ? '+' : ''}${r1(p.trendPerMonth)}/mo${p.plateau ? ' · plateau' : ''}`
+        : `${p.needForTrend} more test(s) for a trend`;
       html +=
-        `<div class="log-metric"><span class="lm-big">${r1(p.rollAvg)}</span>` +
-        `<span class="lm-label">rolling avg · per 3 darts (your level)</span></div>`;
-      let trend = p.trendKnown
-        ? `${p.trendPerMonth >= 0 ? '+' : ''}${r1(p.trendPerMonth)}/mo${p.plateau ? ' · plateau, keep throwing' : ''}`
-        : `need ${p.needForTrend} more test(s)`;
-      html += `<div class="log-note">latest ${r1(p.latest)} (one noisy dot · ±${r1(p.luckBand)} is luck) · trend ${trend}</div>`;
+        `<div class="lp-row"><span class="lp-big">${r1(p.rollAvg)}</span><span class="lp-unit">avg /3 darts</span></div>` +
+        `<div class="lp-sub">latest ${r1(p.latest)} · ±${r1(p.luckBand)} is luck · ${trend}</div>` +
+        lineSpark(p.series.map(s => s.roll)) +
+        '<div class="lp-cap">rolling TEST average</div>';
     } else {
-      html += `<div class="log-note">${p.tests} test session(s) — a few more before any trend means anything.</div>`;
+      html +=
+        `<div class="lp-row"><span class="lp-big">${p.tests}</span><span class="lp-unit">TEST done</span></div>` +
+        '<div class="lp-sub">log a few TEST sessions to see your level</div>';
     }
+    html += '</div>';
     els.summary.innerHTML = html;
   }
 

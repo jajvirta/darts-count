@@ -57,6 +57,14 @@
       onAim: dartsIn(7) >= weeklyAim,
       aboveFloor: dartsIn(7) >= weeklyFloor,
     };
+    // Daily darts for the last `days` days (continuous, zero-filled) — for the
+    // volume sparkline.
+    const days = opts.days || 30;
+    volume.daily = [];
+    for (let d = now - days + 1; d <= now; d++) {
+      const darts = sum(list.filter(s => dayNum(s.date) === d).map(s => s.darts));
+      volume.daily.push({ date: new Date(d * DAY).toISOString().slice(0, 10), darts });
+    }
 
     const tests = list.filter(s => s.type === 'test');
     const progress = { tests: tests.length };
@@ -74,6 +82,12 @@
       progress.realChange = recent.length ? noise / Math.sqrt(recent.length) : noise; // 1 SE of the mean
       progress.min = Math.min(...avgs);
       progress.max = Math.max(...avgs);
+      // Per-test series with the rolling average up to each point — for the
+      // progress sparkline.
+      progress.series = tests.map((s, i) => {
+        const w = tests.slice(Math.max(0, i - roll + 1), i + 1).map(avg3);
+        return { date: s.date, avg3: avg3(s), roll: mean(w) };
+      });
 
       const reg = regression(tests.map(s => ({ x: dayNum(s.date), y: avg3(s) })));
       if (reg) {
