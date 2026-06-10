@@ -14,6 +14,7 @@
 
   let els = {};
   let sessions = [];
+  const expanded = new Set();   // history rows showing their per-visit histogram
 
   function setStatus(msg, kind) {
     els.status.textContent = msg || '';
@@ -65,6 +66,23 @@
       `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(values[n - 1]).toFixed(1)}" r="3" fill="var(--accent)" vector-effect="non-scaling-stroke"/></svg>`;
   }
 
+  // Visit-score histogram (labelled bars), floor bucket tinted, ceiling bright.
+  function histChart(buckets) {
+    const max = Math.max(1, ...buckets.map(b => b.count));
+    return '<div class="dist-hist">' + buckets.map(b => {
+      const h = b.count ? Math.max(8, Math.round(b.count / max * 100)) : 0;
+      const cls = b.hi <= 26 ? ' dh-floor' : (b.lo >= 60 ? ' dh-ceil' : '');
+      return `<div class="dh-col"><div class="dh-n">${b.count}</div>` +
+        `<div class="dh-track"><div class="dh-bar${cls}" style="height:${h}%"></div></div>` +
+        `<div class="dh-lbl">${b.label}</div></div>`;
+    }).join('') + '</div>';
+  }
+  function drillText(d) {
+    if (d.floorPct >= 12) return `Drill the floor: ${r1(d.floorPct)}% of visits are ≤26 — cutting those gains the most. Groove the T20 bed (consistency) over chasing max.`;
+    if (d.ceilingPct < 45) return `Drill the ceiling: only ${r1(d.ceilingPct)}% are 60+. Floor's solid — go for more trebles per visit.`;
+    return 'Balanced shape — low floor, healthy ceiling. Keep grooving.';
+  }
+
   function renderSummary() {
     const r = ScoringStats.analyze(sessions, { roll: 5, weeklyAim: 2000, weeklyFloor: 1200, days: 30 });
     const v = r.volume, p = r.progress;
@@ -96,6 +114,19 @@
         '<div class="lp-sub">log a few TEST sessions to see your level</div>';
     }
     html += '</div>';
+
+    // Distribution card (full width) — only with per-visit TEST data.
+    if (p.dist) {
+      const d = p.dist;
+      html += '<div class="lp-card lp-wide">' +
+        `<div class="lp-row"><span class="lp-big">${r1(d.floorPct)}%</span>` +
+        `<span class="lp-unit">≤26 floor · ${r1(d.ceilingPct)}% are 60+ (ceiling)</span></div>` +
+        `<div class="lp-sub">${d.tonPlus} ton+ · max ${d.max} · mean ${r1(d.mean)} · SD ${r1(d.sd)} · ${d.sessions} session${d.sessions > 1 ? 's' : ''}</div>` +
+        histChart(d.buckets) +
+        '<div class="lp-cap">visit-score distribution</div>' +
+        `<div class="log-note dist-drill">${drillText(d)}</div>` +
+        '</div>';
+    }
     els.summary.innerHTML = html;
   }
 
@@ -104,15 +135,21 @@
     const rows = sessions.slice().reverse().map(s => {
       const a = ScoringStats.avg3(s);
       const isTest = s.type === 'test';
-      return `<li class="log-row${isTest ? ' is-test' : ''}">` +
-        `<span class="lr-date">${s.date}</span>` +
+      const hasDist = isTest && Array.isArray(s.visits) && s.visits.length;
+      let row = `<li class="log-row${isTest ? ' is-test' : ''}${hasDist ? ' has-dist' : ''}" data-id="${s.id}">` +
+        `<span class="lr-date">${s.date}${hasDist ? ' ▾' : ''}</span>` +
         `<span class="lr-type">${s.type}</span>` +
         `<span class="lr-target">${s.target}</span>` +
         `<span class="lr-darts">${s.darts}d</span>` +
         `<span class="lr-score">${r0(s.score)}</span>` +
         `<span class="lr-avg">${r1(a)}</span>` +
         `<button class="lr-del" data-id="${s.id}" title="Delete">✕</button>` +
-        `</li>`;
+        '</li>';
+      if (hasDist && expanded.has(s.id)) {
+        const d = ScoringStats.visitStats(s.visits);
+        row += `<li class="lr-detail"><div class="lp-sub">${d.tonPlus} ton+ · max ${d.max} · ${r1(d.floorPct)}% ≤26 · ${r1(d.ceilingPct)}% 60+</div>${histChart(d.buckets)}</li>`;
+      }
+      return row;
     }).join('');
     els.history.innerHTML = `<ul class="log-list">${rows}</ul>`;
   }
@@ -171,7 +208,13 @@
       els.save.addEventListener('click', save);
       els.history.addEventListener('click', e => {
         const b = e.target.closest('.lr-del');
-        if (b) del(b.getAttribute('data-id'));
+        if (b) { del(b.getAttribute('data-id')); return; }
+        const row = e.target.closest('.log-row.has-dist');
+        if (row) {
+          const id = row.getAttribute('data-id');
+          expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+          renderHistory();
+        }
       });
       const startBtn = $('btnStartTestlog');
       if (startBtn) startBtn.addEventListener('click', () => global.TestLog && TestLog.start());

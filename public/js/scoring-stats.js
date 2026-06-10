@@ -37,6 +37,27 @@
     return { slope, intercept: my - slope * mx };
   }
 
+  // Distribution stats over an array of 3-dart visit totals (0–180). Pure.
+  // Floor = wasted visits (≤26); ceiling = clean (≥60); ton+ = ≥100.
+  const VISIT_EDGES = [[0, 26], [27, 39], [40, 59], [60, 79], [80, 99], [100, 139], [140, 180]];
+  const VISIT_LABELS = ['0', '27', '40', '60', '80', '100', '140'];
+  function visitStats(visits) {
+    const n = visits.length;
+    if (!n) return null;
+    const cnt = pred => visits.filter(pred).length;
+    return {
+      n,
+      mean: mean(visits),
+      sd: sd(visits),
+      floorPct: cnt(v => v <= 26) / n * 100,   // wasted visits
+      ceilingPct: cnt(v => v >= 60) / n * 100,  // clean treble+ pace
+      tonPlus: cnt(v => v >= 100),              // count of 100+
+      max: Math.max(...visits),
+      buckets: VISIT_EDGES.map(([lo, hi], i) =>
+        ({ lo, hi, label: VISIT_LABELS[i], count: cnt(v => v >= lo && v <= hi) })),
+    };
+  }
+
   // sessions: array; opts: { roll, weeklyAim, weeklyFloor, nowDay }
   function analyze(sessions, opts) {
     opts = opts || {};
@@ -101,6 +122,15 @@
       }
     }
 
+    // Score distribution across recent detailed (per-visit) TEST sessions —
+    // works with even one. Floor (≤26) vs ceiling (≥60) shows what to drill.
+    const detailed = tests.filter(s => Array.isArray(s.visits) && s.visits.length);
+    if (detailed.length) {
+      const recentDetailed = detailed.slice(-10);
+      progress.dist = visitStats(recentDetailed.flatMap(s => s.visits));
+      progress.dist.sessions = recentDetailed.length;
+    }
+
     return {
       volume,
       progress,
@@ -108,7 +138,7 @@
     };
   }
 
-  global.ScoringStats = { analyze, avg3, dayNum, mean, sd, regression };
+  global.ScoringStats = { analyze, visitStats, avg3, dayNum, mean, sd, regression };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 // Node export for offline unit-testing (ignored in the browser).

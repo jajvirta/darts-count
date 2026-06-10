@@ -423,6 +423,21 @@ button { font-family: inherit; cursor: pointer; }
 .spark { width: 100%; height: 38px; display: block; margin-top: 4px; }
 @media (max-width: 520px) { .log-summary { grid-template-columns: 1fr; } }
 .log-note { font-size: 0.8rem; color: var(--muted); }
+
+/* distribution / floor-ceiling */
+.lp-wide { grid-column: 1 / -1; }
+.dist-hist { display: flex; align-items: flex-end; gap: 6px; margin-top: 8px; }
+.dh-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.dh-n { font-size: 0.65rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dh-track { width: 100%; height: 56px; display: flex; align-items: flex-end; }
+.dh-bar { width: 100%; background: var(--line); border-radius: 3px 3px 0 0; }
+.dh-bar.dh-ceil { background: var(--accent); }
+.dh-bar.dh-floor { background: #c2683f; }
+.dh-lbl { font-size: 0.6rem; color: var(--muted); }
+.dist-drill { margin-top: 10px; line-height: 1.4; color: var(--text); }
+.log-row.has-dist { cursor: pointer; }
+.lr-detail { list-style: none; background: var(--bg); border-radius: 0 0 8px 8px; padding: 8px 10px 10px; margin-top: -3px; }
+.lr-detail .dh-track { height: 40px; }
 .log-form { max-width: none; margin: 0 0 16px; }
 .log-grid {
   display: grid;
