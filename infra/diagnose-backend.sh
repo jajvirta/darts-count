@@ -148,7 +148,11 @@ if [[ -n "$CF_DOMAIN" && "$CF_DOMAIN" != "None" ]]; then
   CG=$(code_of "$RG"); BG=$(body_of "$RG")
   echo "GET $CFURL -> HTTP $CG"; echo "$BG"
   if [[ "$CG" == 200 ]]; then echo "  GET works → signing is fine; the POST issue is method/body/query-specific."
-  elif grep -qi 'signature' <<<"$BG"; then echo "  GET ALSO fails on signature → the OAC signing itself is wrong (see 5b: OAC type, or Authorization in the forwarded headers), NOT the body."
+  elif grep -qi 'signature\|Function URL authorization\|Forbidden' <<<"$BG"; then
+    echo "  GET ALSO fails → the OAC signing itself is being rejected, NOT the body."
+    echo "     #1 cause: the origin request policy forwards the Authorization header (see 5b)."
+    echo "     Fix: use the custom policy (forward X-Api-Key + query strings, NOT Authorization)"
+    echo "     by re-running ./infra/backend.sh."
   else echo "  GET status $CG — see body."; fi
   echo
 
@@ -162,7 +166,7 @@ if [[ -n "$CF_DOMAIN" && "$CF_DOMAIN" != "None" ]]; then
          ID=$(jq -r '.session.id // empty' <<<"$B" 2>/dev/null)
          [[ -n "$ID" ]] && curl -s -m 15 -o /dev/null -X DELETE "${CFURL}/$ID" -H "X-Api-Key: $API_TOKEN" \
             && echo "  (cleaned up diagnostic row $ID)" ;;
-    403) if grep -qi 'signature' <<<"$B"; then echo "  >> SigV4 mismatch — a client/request is still sending a body or an Authorization header. This curl sends neither; if the app fails but this passes, redeploy the frontend (store.js sends query params now).";
+    403) if grep -qi 'signature' <<<"$B"; then echo "  >> SigV4 mismatch — the origin request policy is forwarding the Authorization header, which breaks OAC signing (see 5b). Re-run ./infra/backend.sh to switch to the custom X-Api-Key policy.";
          elif grep -qi '"error":"forbidden"' <<<"$B"; then echo "  >> origin-secret mismatch (section 4).";
          elif grep -qi 'Function URL authorization\|AccessDenied' <<<"$B"; then echo "  >> OAC/permission not effective (sections 1,2,4).";
          elif grep -qi '<Error>\|<Code>AccessDenied' <<<"$B"; then echo "  >> routed to S3, not Lambda (section 5).";

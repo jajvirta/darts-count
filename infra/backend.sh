@@ -9,8 +9,11 @@
 #      (AWS_IAM, not anonymous, because some AWS Org guardrails forbid public
 #      Function URLs. A bearer token still gates the app; an optional
 #      X-Origin-Secret header is now redundant but harmless.)
-#   5. on your EXISTING distribution: a Lambda origin (with the OAC attached) +
-#      an ORDERED cache behavior for the API path, inserted BEFORE the app one
+#   5. a custom origin request policy that forwards X-Api-Key + query strings but
+#      NOT Authorization (OAC reserves it for the signature) or Host
+#   6. on your EXISTING distribution: a Lambda origin (with the OAC attached) +
+#      an ORDERED cache behavior for the API path (using that policy), inserted
+#      BEFORE the app one
 #
 # Safe to re-run: updates the function code/config, and only mutates the
 # distribution when the origin (incl. its OAC) or behavior are missing.
@@ -42,8 +45,8 @@ if [[ -n "$PREFIX" ]]; then API_PATTERN="/${PREFIX}/api/*"; else API_PATTERN="/a
 
 ORIGIN_ID="lambda-${LAMBDA_NAME}"
 OAC_NAME="${LAMBDA_NAME}-oac"
+ORP_NAME="${LAMBDA_NAME}-orp"
 CACHING_DISABLED="4135ea2d-6df8-44a3-9df3-4b5a84be39ad"           # AWS managed
-ALL_VIEWER_EXCEPT_HOST="b689b0a8-53d0-40ab-baf2-68738e2966ac"     # AWS managed (for Lambda/ALB origins)
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 TABLE_ARN="arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/${TABLE_NAME}"
@@ -142,6 +145,27 @@ else
   echo "==> OAC $OAC_NAME exists ($OAC_ID)"
 fi
 
+# Custom origin request policy: forward X-Api-Key + all query strings, but NOT
+# the Authorization header (OAC reserves it for the SigV4 signature; forwarding
+# it — as the managed AllViewerExceptHostHeader does — breaks OAC signing and
+# every request fails IAM auth) and NOT Host (CloudFront sets the origin host).
+ORP_ID="$(aws cloudfront list-origin-request-policies --type custom \
+  --query "OriginRequestPolicyList.Items[?OriginRequestPolicy.OriginRequestPolicyConfig.Name=='${ORP_NAME}'].OriginRequestPolicy.Id | [0]" \
+  --output text 2>/dev/null || true)"
+if [[ -z "$ORP_ID" || "$ORP_ID" == "None" ]]; then
+  echo "==> Creating origin request policy $ORP_NAME (X-Api-Key + query strings, no Authorization)"
+  ORP_CFG="$(jq -n --arg name "$ORP_NAME" '
+    { Name:$name, Comment:"OAC-safe: forward X-Api-Key + query strings, not Authorization/Host",
+      HeadersConfig:{ HeaderBehavior:"whitelist", Headers:{ Quantity:1, Items:["x-api-key"] } },
+      CookiesConfig:{ CookieBehavior:"none" },
+      QueryStringsConfig:{ QueryStringBehavior:"all" } }')"
+  ORP_ID="$(aws cloudfront create-origin-request-policy \
+    --origin-request-policy-config "$ORP_CFG" \
+    --query 'OriginRequestPolicy.Id' --output text)"
+else
+  echo "==> Origin request policy $ORP_NAME exists ($ORP_ID)"
+fi
+
 # Invoke permission: ONLY the CloudFront service principal, scoped to this
 # distribution. Drop any earlier public-invoke statement. add-permission errors
 # if the statement already exists — treat ONLY that as benign.
@@ -170,9 +194,10 @@ jq '.DistributionConfig' "$TMP/dist.json" > "$TMP/config.json"
 
 ORIGIN_OAC="$(jq -r --arg id "$ORIGIN_ID" '(.Origins.Items[] | select(.Id==$id) | .OriginAccessControlId) // ""' "$TMP/config.json")"
 HAVE_BEHAVIOR="$(jq --arg p "$API_PATTERN" '((.CacheBehaviors.Items // [])[] | select(.PathPattern == $p)) // empty | true' "$TMP/config.json")"
+BEHAVIOR_ORP="$(jq -r --arg p "$API_PATTERN" '((.CacheBehaviors.Items // [])[] | select(.PathPattern == $p) | .OriginRequestPolicyId) // ""' "$TMP/config.json")"
 
-if [[ "$ORIGIN_OAC" == "$OAC_ID" && "$HAVE_BEHAVIOR" == "true" ]]; then
-  echo "==> Distribution already has the API origin (with OAC) + behavior — nothing to change."
+if [[ "$ORIGIN_OAC" == "$OAC_ID" && "$HAVE_BEHAVIOR" == "true" && "$BEHAVIOR_ORP" == "$ORP_ID" ]]; then
+  echo "==> Distribution already has the API origin (with OAC) + behavior (correct policy) — nothing to change."
 else
   if [[ -n "$ORIGIN_SECRET" ]]; then
     CUSTOM_HEADERS="$(jq -n --arg v "$ORIGIN_SECRET" '{Quantity:1,Items:[{HeaderName:"X-Origin-Secret",HeaderValue:$v}]}')"
@@ -189,7 +214,7 @@ else
       ConnectionAttempts:3, ConnectionTimeout:10,
       OriginShield:{Enabled:false} }')"
   BEHAVIOR_JSON="$(jq -n --arg origin "$ORIGIN_ID" --arg pattern "$API_PATTERN" \
-      --arg cp "$CACHING_DISABLED" --arg orp "$ALL_VIEWER_EXCEPT_HOST" '
+      --arg cp "$CACHING_DISABLED" --arg orp "$ORP_ID" '
     { PathPattern:$pattern, TargetOriginId:$origin,
       ViewerProtocolPolicy:"redirect-to-https",
       AllowedMethods:{ Quantity:7, Items:["GET","HEAD","OPTIONS","PUT","POST","PATCH","DELETE"],

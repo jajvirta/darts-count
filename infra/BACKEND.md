@@ -11,7 +11,9 @@ backend is thin storage only.
 Browser (Log view)
    │  fetch  X-Api-Key: <API_TOKEN>     (NOT Authorization — see below)
    ▼
-CloudFront  ──  behavior "/<prefix>/api/*"  (CachingDisabled, AllViewerExceptHostHeader)
+CloudFront  ──  behavior "/<prefix>/api/*"  (CachingDisabled + a CUSTOM origin
+   │            request policy: forwards X-Api-Key + query strings, NOT
+   │            Authorization/Host — see below)
    │            OAC signs the request (SigV4) → sets the Authorization header
    │            also injects  X-Origin-Secret: <ORIGIN_SECRET>
    ▼
@@ -37,6 +39,14 @@ client also sent `Authorization: Bearer …`, it would clobber the OAC signature
 (`The request signature we calculated does not match …`). So the user secret
 travels in `X-Api-Key`; no client should send `Authorization`. (`X-Origin-Secret`
 is now redundant given the signature, but kept as harmless defence-in-depth.)
+
+**Why a custom origin request policy (not `AllViewerExceptHostHeader`):** the
+managed `AllViewerExceptHostHeader` forwards *every* viewer header except `Host`
+— including `Authorization`. With OAC, forwarding `Authorization` breaks the
+SigV4 signing and **every** request fails IAM auth (GET → `Forbidden`, POST →
+`signature … does not match`), even when the client sends no `Authorization` at
+all. `backend.sh` therefore creates a custom policy that forwards only
+`X-Api-Key` plus all query strings, and neither `Authorization` nor `Host`.
 
 ## API
 

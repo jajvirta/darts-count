@@ -122,7 +122,10 @@ There are no automated tests; verify directly.
   behavior. The Function URL is `AWS_IAM` and CloudFront signs requests via an
   **OAC** (anonymous/`NONE` Function URLs are blocked by the org guardrail). The
   user secret (`API_TOKEN`) travels in the **`X-Api-Key`** header — *not*
-  `Authorization`, which OAC reserves for its SigV4 signature. Same conventions
+  `Authorization`, which OAC reserves for its SigV4 signature. The behavior uses
+  a **custom origin request policy** forwarding `X-Api-Key` + query strings but
+  NOT `Authorization` (forwarding it breaks OAC signing) or `Host`; writes carry
+  fields in the **query string**, not a body (OAC doesn't sign bodies). Same conventions
   as `bootstrap.sh` (prints the plan, prompts before mutating the distribution,
   `APPLY=1` skips). Test the jq distribution transform against synthetic
   `get-distribution-config` output before applying. `infra/migrate-to-oac.sh`
