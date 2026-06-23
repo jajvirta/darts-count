@@ -129,6 +129,9 @@
       const recentDetailed = detailed.slice(-10);
       progress.dist = visitStats(recentDetailed.flatMap(s => s.visits));
       progress.dist.sessions = recentDetailed.length;
+      // Floor rate (% ≤26) per detailed session over time — lower is better.
+      progress.dist.floorSeries = detailed.map(s =>
+        ({ date: s.date, floorPct: visitStats(s.visits).floorPct }));
     }
 
     return {

@@ -6,3 +6,8 @@ deploy.env
 behaviors.txt
 curl-output.txt
 diagnose.txt
+
+# stray non-project items that live in this dir — NEVER commit to this public repo
+# (login-api is a separate internal git repo; the .gz is a local CLI binary)
+/login-api/
+yle_*.gz

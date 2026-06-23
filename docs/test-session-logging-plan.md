@@ -1,6 +1,8 @@
 # Plan: per-visit TEST session logging
 
-Status: **planned, not started.** Resume point for the next session.
+Status: **DONE** (shipped). Per-visit entry, the prominent sparkline progress
+cards, and the floor/ceiling distribution analysis are all built and verified.
+Kept for reference.
 
 ## Goal
 A guided "log a TEST session" mode in the app: enter 100 three-dart visit

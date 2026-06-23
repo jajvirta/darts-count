@@ -55,15 +55,16 @@
     }).join('');
     return `<svg class="spark" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" aria-hidden="true">${bars}</svg>`;
   }
-  function lineSpark(values) {
+  function lineSpark(values, color) {
+    color = color || 'var(--accent)';
     const n = values.length; if (n < 2) return '';
     const min = Math.min(...values), max = Math.max(...values), span = (max - min) || 1, pad = 4;
     const x = i => (i / (n - 1)) * SPARK_W;
     const y = val => pad + (1 - (val - min) / span) * (SPARK_H - 2 * pad);
     const pts = values.map((val, i) => `${x(i).toFixed(1)},${y(val).toFixed(1)}`).join(' ');
     return `<svg class="spark" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" aria-hidden="true">` +
-      `<polyline fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="${pts}"/>` +
-      `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(values[n - 1]).toFixed(1)}" r="3" fill="var(--accent)" vector-effect="non-scaling-stroke"/></svg>`;
+      `<polyline fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="${pts}"/>` +
+      `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(values[n - 1]).toFixed(1)}" r="3" fill="${color}" vector-effect="non-scaling-stroke"/></svg>`;
   }
 
   // Visit-score histogram (labelled bars), floor bucket tinted, ceiling bright.
@@ -123,9 +124,16 @@
         `<span class="lp-unit">≤26 floor · ${r1(d.ceilingPct)}% are 60+ (ceiling)</span></div>` +
         `<div class="lp-sub">${d.tonPlus} ton+ · max ${d.max} · mean ${r1(d.mean)} · SD ${r1(d.sd)} · ${d.sessions} session${d.sessions > 1 ? 's' : ''}</div>` +
         histChart(d.buckets) +
-        '<div class="lp-cap">visit-score distribution</div>' +
-        `<div class="log-note dist-drill">${drillText(d)}</div>` +
-        '</div>';
+        '<div class="lp-cap">visit-score distribution</div>';
+      // Floor-rate trend (≤26 % per session) — the metric to drive down.
+      if (d.floorSeries && d.floorSeries.length >= 2) {
+        const fs = d.floorSeries.map(p => p.floorPct);
+        const delta = fs[fs.length - 1] - fs[0];
+        const dir = delta < -1 ? '↓ improving' : delta > 1 ? '↑ rising' : '→ flat';
+        html += lineSpark(fs, '#c2683f') +
+          `<div class="lp-cap">floor rate ≤26 · ${d.floorSeries.length} sessions · ${dir} · lower is better</div>`;
+      }
+      html += `<div class="log-note dist-drill">${drillText(d)}</div></div>`;
     }
     els.summary.innerHTML = html;
   }
