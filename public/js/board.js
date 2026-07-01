@@ -11,17 +11,20 @@
   const LOGICAL = 500;
   const CX = LOGICAL / 2;
   const CY = LOGICAL / 2;
-  const BOARD_RADIUS = 230;
+  // Smaller than the canvas so there's an outer ring for Mawari Tau pins +
+  // room to push the numbers out. Double/triple rings are deliberately WIDER
+  // than a real board (easier tap targets, clearer).
+  const BOARD_RADIUS = 200;
 
   const SECTOR_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
   const SECTOR_ANGLE = (2 * Math.PI) / 20;
 
-  const R_BULL = 6.35 / 170 * BOARD_RADIUS;
-  const R_OUTER_BULL = 15.9 / 170 * BOARD_RADIUS;
-  const R_INNER_TRIPLE = 99 / 170 * BOARD_RADIUS;
-  const R_OUTER_TRIPLE = 107 / 170 * BOARD_RADIUS;
-  const R_INNER_DOUBLE = 162 / 170 * BOARD_RADIUS;
-  const R_OUTER_DOUBLE = 170 / 170 * BOARD_RADIUS;
+  const R_BULL = BOARD_RADIUS * 0.045;
+  const R_OUTER_BULL = BOARD_RADIUS * 0.10;
+  const R_INNER_TRIPLE = BOARD_RADIUS * 0.50;
+  const R_OUTER_TRIPLE = BOARD_RADIUS * 0.64;   // triple width ~0.14 (was ~0.047)
+  const R_INNER_DOUBLE = BOARD_RADIUS * 0.85;
+  const R_OUTER_DOUBLE = BOARD_RADIUS * 1.0;    // double width ~0.15
 
   const COLOR_BLACK = '#1c1c1c';
   const COLOR_WHITE = '#f1dbb5';
@@ -116,8 +119,8 @@
     ctx.textBaseline = 'middle';
     for (let i = 0; i < 20; i++) {
       const angle = -Math.PI / 2 + i * SECTOR_ANGLE;
-      const x = CX + (R_OUTER_DOUBLE + 14) * Math.cos(angle);
-      const y = CY + (R_OUTER_DOUBLE + 14) * Math.sin(angle);
+      const x = CX + (R_OUTER_DOUBLE + 34) * Math.cos(angle);
+      const y = CY + (R_OUTER_DOUBLE + 34) * Math.sin(angle);
       ctx.fillText(SECTOR_ORDER[i].toString(), x, y);
     }
   }
@@ -193,14 +196,61 @@
     });
   }
 
-  // Render the board plus the given darts (highlights + numbered markers).
-  function render(darts) {
+  // Mawari Tau overlay: colored discs sitting on the rim of each sector.
+  // taus: [{ sector: 1..20, player: 1|2 }]. Uses the same angle math as the
+  // numbers so markers land on the right sector; multiple on one sector stack
+  // inward. Purely additive — callers that pass no taus are unaffected.
+  const TAU_COLORS = { 1: '#00b4d8', 2: '#ff70a6' };
+  // Taus as physical-style pins sitting just OUTSIDE the double ring (a stem
+  // from the rim to a colored head). Color = player; multiple on one sector
+  // spread angularly so they all stay outside the board.
+  function drawTaus(taus) {
+    const bySector = {};
+    taus.forEach(t => { (bySector[t.sector] = bySector[t.sector] || []).push(t); });
+    Object.keys(bySector).forEach(sec => {
+      const i = SECTOR_ORDER.indexOf(Number(sec));
+      if (i < 0) return;
+      const base = -Math.PI / 2 + i * SECTOR_ANGLE;
+      const group = bySector[sec];
+      group.forEach((t, k) => {
+        const spread = group.length > 1 ? (k - (group.length - 1) / 2) * 0.12 : 0;
+        const angle = base + spread;
+        const headR = R_OUTER_DOUBLE + 16;
+        const x = CX + headR * Math.cos(angle);
+        const y = CY + headR * Math.sin(angle);
+        const sx = CX + (R_OUTER_DOUBLE + 2) * Math.cos(angle);
+        const sy = CY + (R_OUTER_DOUBLE + 2) * Math.sin(angle);
+        const color = TAU_COLORS[t.player] || '#ffd166';
+        ctx.beginPath();          // stem
+        ctx.moveTo(sx, sy); ctx.lineTo(x, y);
+        ctx.strokeStyle = '#111'; ctx.lineWidth = 3.5; ctx.stroke();
+        ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+        ctx.beginPath();          // head
+        ctx.arc(x, y, 11, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#111';   // player number inside the head
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(t.player), x, y);
+      });
+    });
+  }
+
+  // Render the board plus the given darts (highlights + numbered markers) and
+  // optional Mawari Taus.
+  function render(darts, taus) {
     if (!ctx) return;
     drawBoard();
     if (darts && darts.length) {
       drawHitHighlights(darts);
       drawDartMarkers(darts.map(d => ({ x: d.x, y: d.y })));
     }
+    if (taus && taus.length) drawTaus(taus);
   }
 
   // --- Throw simulation -------------------------------------------------
@@ -302,6 +352,23 @@
     return { sectorIndex, ring: 'miss', label: 'Miss (0)', score: 0 };
   }
 
+  // Map a viewport tap to a Mawari-style hit: { sector:1..20|null, ring }.
+  // ring ∈ single|double|triple|bull|outerBull|miss (inner/outer single merged).
+  function hitAt(clientX, clientY) {
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const size = rect.width || 1;
+    const lx = ((clientX - rect.left) / size) * LOGICAL;
+    const ly = ((clientY - rect.top) / size) * LOGICAL;
+    const r = Math.hypot(lx - CX, ly - CY);
+    const angle = Math.atan2(ly - CY, lx - CX);
+    const hit = identifyHit(r, angle);
+    let ring = hit.ring;
+    if (ring === 'innerSingle' || ring === 'outerSingle') ring = 'single';
+    if (ring === 'bull' || ring === 'outerBull' || ring === 'miss') return { sector: null, ring };
+    return { sector: SECTOR_ORDER[hit.sectorIndex], ring };
+  }
+
   function init(canvasEl) {
     canvas = canvasEl;
     ctx = canvas.getContext('2d');
@@ -309,13 +376,13 @@
     drawBoard();
   }
 
-  function resize(darts) {
+  function resize(darts, taus) {
     setupCanvas();
-    render(darts || []);
+    render(darts || [], taus);
   }
 
   global.Board = {
-    init, resize, render,
+    init, resize, render, hitAt,
     throwDart, throwDartAtTarget,
     setProfile, getProfile,
     SECTOR_ORDER,

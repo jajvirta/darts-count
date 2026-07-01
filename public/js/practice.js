@@ -491,10 +491,11 @@
   }
 
   function onActivate() {
-    // The Numpad is a singleton; TestLog may have re-pointed it to its own pad.
-    // Re-bind it to the practice keypad on every activation.
+    // Numpad and Board are singletons; TestLog/Mawari may have re-pointed them
+    // to their own elements. Re-bind both to the practice view on activation.
     Numpad.init(document.getElementById('numpad'));
     Numpad.setHandlers({ digit: onDigit, backspace: onBackspace, enter: onEnter });
+    Board.init(el.canvas);
     Board.resize(started ? (phase === 'answered' ? currentDarts
       : (mode === 'finishing' ? currentDarts : currentDarts.slice(0, revealed))) : []);
     updateEnter();

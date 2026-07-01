@@ -50,6 +50,7 @@
     trainer: { el: null, tab: null, ctrl: () => global.Trainer },
     chart: { el: null, tab: null, ctrl: () => null },
     log: { el: null, tab: null, ctrl: () => global.Log },
+    mawari: { el: null, tab: null, ctrl: () => global.Mawari },
   };
   let activeView = null;
 
@@ -84,6 +85,7 @@
     Trainer.init();
     TestLog.init();
     Log.init();
+    Mawari.init();
 
     // One keyboard bus → active controller. Ignore when typing in form fields.
     global.addEventListener('keydown', (e) => {

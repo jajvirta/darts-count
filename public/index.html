@@ -22,6 +22,7 @@
       <button class="tab" data-view="trainer" role="tab">Finishes</button>
       <button class="tab" data-view="chart" role="tab">Chart</button>
       <button class="tab" data-view="log" role="tab">Log</button>
+      <button class="tab" data-view="mawari" role="tab">Mawari</button>
     </nav>
   </header>
 
@@ -211,6 +212,7 @@
           <div class="tl-stat"><div class="tl-big" id="tlCount">0/0</div><div class="tl-lbl">done</div></div>
         </div>
         <div id="tlInput" class="tl-input">—</div>
+        <div id="testlogQuick" class="tl-quick"></div>
         <div id="testlogPad" class="numpad tl-pad"></div>
         <ul id="tlList" class="tl-list"></ul>
         <label class="field"><span>Notes</span><input type="text" id="tlNotes" placeholder="optional"></label>
@@ -224,6 +226,57 @@
     </div>
   </main>
 
+  <!-- ===================== MAWARI ===================== -->
+  <main id="view-mawari" class="view hidden" role="tabpanel">
+    <div id="mawariSetup" class="setup-card">
+      <h2>Mawari</h2>
+      <p class="hint-text">Race your 3 Taus up the track 1→20→Home. Real-board scorekeeper for 2 players.</p>
+      <label class="field">
+        <span>Format</span>
+        <select id="mawariFormat">
+          <option value="1">One-shirushi mawari</option>
+          <option value="2">Two-shirushi mawari</option>
+          <option value="3">Three-shirushi mawari</option>
+        </select>
+      </label>
+      <button class="btn-primary big" id="btnMawariStart">Start match</button>
+    </div>
+
+    <div id="mawariStage" class="hidden">
+      <div class="mw-col mw-col-board">
+        <div id="mawariBanner" class="mw-banner"></div>
+        <div class="board-wrap">
+          <div id="mawariHomeP1" class="mw-stash mw-stash-l" title="Player 1 Home"></div>
+          <div id="mawariHomeP2" class="mw-stash mw-stash-r" title="Player 2 Home"></div>
+          <canvas id="mawariBoard"></canvas>
+        </div>
+      </div>
+      <div class="mw-col mw-col-controls">
+        <div id="mawariEntry" class="mw-entry">
+          <div id="mwSectorDisplay" class="mw-secdisp">—</div>
+          <div id="mawariPad" class="numpad"></div>
+          <div class="mw-rings">
+            <button type="button" class="btn-ghost" data-ring="single">Single</button>
+            <button type="button" class="btn-ghost" data-ring="double">Double</button>
+            <button type="button" class="btn-ghost" data-ring="triple">Triple</button>
+          </div>
+          <div class="mw-rings">
+            <button type="button" class="btn-ghost" data-special="bull">Bull 50</button>
+            <button type="button" class="btn-ghost" data-special="outerBull">25</button>
+            <button type="button" class="btn-ghost" data-special="miss">Miss</button>
+          </div>
+        </div>
+        <div id="mawariMsg" class="log-status"></div>
+        <div class="mw-actions">
+          <button class="btn-ghost" id="btnMawariUndo">Undo dart</button>
+          <button class="btn-primary" id="btnMawariResolve">End turn</button>
+          <button class="btn-ghost" id="btnMawariNew" title="End game">End game</button>
+        </div>
+        <div id="mawariStatus" class="mw-status"></div>
+      </div>
+    </div>
+  </main>
+
   <script src="js/checkout.js"></script>
   <script src="js/board.js"></script>
   <script src="js/numpad.js"></script>
@@ -233,6 +286,8 @@
   <script src="js/store.js"></script>
   <script src="js/testlog.js"></script>
   <script src="js/log.js"></script>
+  <script src="js/mawari-engine.js"></script>
+  <script src="js/mawari.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

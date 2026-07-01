@@ -13,6 +13,9 @@
   const r1 = n => (Math.round(n * 10) / 10).toFixed(1);
   const todayISO = () => new Date().toISOString().slice(0, 10);
   const SAVE_KEY = 'dcp.testlog';
+  // Most common 3-dart totals at T20 (data-driven + milestones). Tapping one
+  // commits that visit instantly; the numpad stays for any other value.
+  const QUICK_SCORES = [25, 26, 30, 40, 41, 45, 60, 80, 85, 100, 140, 180];
 
   let els = {};
   let active = false;     // entry panel showing
@@ -97,6 +100,10 @@
 
   // Begin editing slot i: start from an empty entry (the old value shows
   // highlighted in the list) so typing replaces rather than appends.
+  // Shortcut: commit a common score in one tap (goes through onEnter, so it
+  // respects edit-in-place too).
+  function quickScore(v) { entry = String(v); onEnter(); }
+
   function startEdit(i) { editing = i; entry = ''; render(); }
   function deleteVisit(i) { visits.splice(i, 1); if (editing === i) editing = null; entry = ''; save(); render(); }
   function undoLast() { if (visits.length) { visits.pop(); editing = null; entry = ''; save(); render(); } }
@@ -181,9 +188,16 @@
         resume: $('tlResume'), lenInput: $('tlLenInput'),
         total: $('tlTotal'), avg: $('tlAvg'), left: $('tlLeft'), count: $('tlCount'),
         input: $('tlInput'), pad: $('testlogPad'), list: $('tlList'), notes: $('tlNotes'),
+        quick: $('testlogQuick'),
         undo: $('btnTlUndo'), confirm: $('btnTlConfirm'), cancel: $('btnTlCancel'), status: $('tlStatus'),
         logBody: $('logBody'), tokenSetup: $('logTokenSetup'),
       };
+      // quick-score buttons (static; one tap commits that visit)
+      els.quick.innerHTML = QUICK_SCORES.map(v => `<button type="button" class="tl-q" data-v="${v}">${v}</button>`).join('');
+      els.quick.addEventListener('click', e => {
+        const b = e.target.closest('.tl-q');
+        if (b) quickScore(parseInt(b.getAttribute('data-v'), 10));
+      });
       // start-screen length picker
       els.startScreen.addEventListener('click', e => {
         const b = e.target.closest('[data-len]');

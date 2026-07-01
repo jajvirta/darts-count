@@ -55,6 +55,22 @@
     }).join('');
     return `<svg class="spark" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" aria-hidden="true">${bars}</svg>`;
   }
+  // Multiple lines sharing one y-scale. series: [{values, color, width?, dot?}].
+  function multiSpark(seriesList) {
+    const all = seriesList.flatMap(s => s.values);
+    if (all.length < 2) return '';
+    const min = Math.min(...all), max = Math.max(...all), span = (max - min) || 1, pad = 4;
+    let svg = `<svg class="spark" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" aria-hidden="true">`;
+    for (const s of seriesList) {
+      const n = s.values.length; if (n < 2) continue;
+      const x = i => (i / (n - 1)) * SPARK_W;
+      const y = val => pad + (1 - (val - min) / span) * (SPARK_H - 2 * pad);
+      const pts = s.values.map((val, i) => `${x(i).toFixed(1)},${y(val).toFixed(1)}`).join(' ');
+      svg += `<polyline fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="${pts}"/>`;
+      if (s.dot) svg += `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(s.values[n - 1]).toFixed(1)}" r="3" fill="${s.color}" vector-effect="non-scaling-stroke"/>`;
+    }
+    return svg + '</svg>';
+  }
   function lineSpark(values, color) {
     color = color || 'var(--accent)';
     const n = values.length; if (n < 2) return '';
@@ -107,8 +123,11 @@
       html +=
         `<div class="lp-row"><span class="lp-big">${r1(p.rollAvg)}</span><span class="lp-unit">avg /3 darts</span></div>` +
         `<div class="lp-sub">latest ${r1(p.latest)} · ±${r1(p.luckBand)} is luck · ${trend}</div>` +
-        lineSpark(p.series.map(s => s.roll)) +
-        '<div class="lp-cap">rolling TEST average</div>';
+        multiSpark([
+          { values: p.series.map(s => s.avg3), color: 'var(--muted)', width: 1.5 },
+          { values: p.series.map(s => s.roll), color: 'var(--accent)', width: 2, dot: true },
+        ]) +
+        '<div class="lp-cap">rolling avg (line) · raw per session (faint)</div>';
     } else {
       html +=
         `<div class="lp-row"><span class="lp-big">${p.tests}</span><span class="lp-unit">TEST done</span></div>` +
