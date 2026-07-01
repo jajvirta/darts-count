@@ -110,24 +110,36 @@ banking). Home Taus can't move again. A Tau must be **on 20** to cash out.
 2. **Engine** — pure `mawari-engine.js` + CLI unit tests of the advance rule and
    state machine (turn/new-turn/drop/home/penalty/win).
 3. **DONE** — controller wired to the engine. Dart entry via **board tap**
-   (`Board.hitAt`) AND **numpad + ring/bull/miss buttons**; live banner (turn,
-   dart n/3), per-player status (Tau sectors with carry, Home count), this-turn
-   dart chips, **stacked-Tau picker**, Undo dart, End turn (resolves new-turn /
-   handover / home / win), win banner. Verified headless (turn flow, picker,
-   hitAt center=bull / top=20, zero console errors).
-4. **Match flow polish (pending)** — penalty UI (voluntary 3 throws → opponent
-   relocates a Tau), Home side-tray visual, Tau move animations, then N>2
-   players and own route/path.
+   (`Board.hitAt`) AND **numpad + ring/bull/miss buttons**; per-dart feedback
+   line (advance/drop/no-drop/home/etc.), per-player status, Undo dart, End
+   game (with confirm), win banner. Verified headless.
+3.5 **DONE — UI polish (this session):**
+   - Co-located Taus **auto-advance** (no picker — all Taus equal).
+   - Taus rendered as **pins outside the double ring** with the player number
+     inside; **double/triple rings widened** and the board shrunk to make room
+     (shared `board.js` — Practice reflects this too).
+   - **Full-screen** during a match (`body.playing` hides the header on mobile,
+     like TestLog); **two-column** layout at ≥768px (iPad + web), single column
+     on phones; **compact controls** so everything fits a phone screen.
+   - Compact top row (turn + this-turn chips merged; format/dart subline + tap
+     hint removed — a Tutorial mode will cover explanation later).
+   - **Home stash** in the board's top corners (🏠 + 3 slots per player, dashed
+     when empty, fill as Taus reach Home).
+   - **"End game"** button with a confirm dialog (was "New").
+   - Bug fix: a **drop only moves a Tau backward** (never to a higher number).
+   - Header safe-area bug fixed (inset was on the bottom).
+4. **Match flow (pending)** — penalty UI (voluntary 3 throws → opponent
+   relocates a Tau), **Tau move animations**, then N>2 players and own
+   route/path.
 
 ## Resolved (2-player)
 - Home accounting, drop target, overshoot-at-20, and own-Tau stacking — all
   confirmed above.
 
-## Still open (can decide during Phase 2/3)
-- **Penalty flow:** exact UI for the voluntary 3 throws + the opponent then
-  moving one of your Taus "to whichever sector they want" (any sector 1–20?
-  presumably not Home).
-- **Stacked-Tau feed:** default when a dart hits a sector with two of your own
-  Taus — prompt the player to pick which advances (confirmed player-choice;
-  needs a UI affordance).
+## Still open (resume here)
+- **Penalty flow (Phase 4, next):** UI for the voluntary 3 throws + the opponent
+  then moving one of your Taus "to whichever sector they want" (any sector 1–20?
+  presumably not Home). The engine exposes `triedToAdvance` per turn already.
+- **Tau move animations** (Phase 4).
 - **N > 2 players** and the **own route/path** split (later).
+- (Resolved: co-located Taus auto-advance — no picker needed.)
